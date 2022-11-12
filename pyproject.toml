@@ -5,7 +5,6 @@ requires = ["flit_core >=3.2,<4"]
 [project]
 name = "ariston"
 readme = "README.md"
-version = "0.11"
 authors = [
     { name = "Tamás Füstös", email = "fustom@gmail.com" }
 ]
@@ -14,3 +13,4 @@ dependencies = [
 ]
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
+dynamic = ['version', 'description']
