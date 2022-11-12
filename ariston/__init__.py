@@ -1,3 +1,4 @@
+"""Ariston module"""
 import logging
 
 from .ariston import (AristonAPI, DeviceAttribute, SystemType,
@@ -11,15 +12,18 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class Ariston:
+    """Ariston class"""
     def __init__(self) -> None:
         self.api: AristonAPI | None = None
         self.cloud_devices: list[dict] = []
 
     async def async_connect(self, username: str, password: str) -> bool:
+        """Connect to the ariston cloud"""
         self.api = AristonAPI(username, password)
         return await self.api.async_connect()
 
     async def async_discover(self) -> list | None:
+        """Retreive ariston devices from the cloud"""
         if self.api is None: 
             _LOGGER.exception("Call async_connect first")
             return
@@ -32,6 +36,7 @@ class Ariston:
     async def async_hello(
         self, gateway: str, extra_energy_features=True, is_metric=True, location="en-US"
     ) -> AristonDevice | None:
+        """Get ariston device"""
         if self.api is None: 
             _LOGGER.exception("Call async_connect() first")
             return
