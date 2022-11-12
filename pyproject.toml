@@ -3,7 +3,7 @@ build-backend = "flit_core.buildapi"
 requires = ["flit_core >=3.2,<4"]
 
 [project]
-name = "ariston"
+name = "python-ariston-api"
 readme = "README.md"
 authors = [
     { name = "Tamás Füstös", email = "fustom@gmail.com" }
