@@ -1,6 +1,7 @@
 [project]
 name = "ariston"
 description = "ariston api"
+long_description = "Python Ariston API"
 version = "0.11"
 authors = [
     { name = "Tamás Füstös", email = "fustom@gmail.com" }
