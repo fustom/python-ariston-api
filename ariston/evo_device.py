@@ -3,8 +3,12 @@ from __future__ import annotations
 
 import logging
 
-from .ariston import (EvoDeviceProperties, EvoPlantMode, MedDeviceSettings,
-                      VelisDeviceProperties)
+from .ariston import (
+    EvoDeviceProperties,
+    EvoPlantMode,
+    MedDeviceSettings,
+    VelisDeviceProperties,
+)
 from .velis_device import AristonVelisDevice
 
 _LOGGER = logging.getLogger(__name__)
@@ -69,9 +73,11 @@ class AristonEvoDevice(AristonVelisDevice):
         """Get water heater maximum setpoint temperature value"""
         if len(self.plant_settings) == 0:
             _LOGGER.exception("Call async_update_settings() first")
-        return self.plant_settings.get(MedDeviceSettings.MED_MAX_SETPOINT_TEMPERATURE, 0)
+        return self.plant_settings.get(
+            MedDeviceSettings.MED_MAX_SETPOINT_TEMPERATURE, 0
+        )
 
-    async def async_get_consumptions_sequences(self) -> None:
+    async def _async_get_consumptions_sequences(self) -> None:
         """Get consumption sequence"""
         self.consumptions_sequences = await self.api.async_get_consumptions_sequences(
             self.gw,
@@ -80,7 +86,7 @@ class AristonEvoDevice(AristonVelisDevice):
 
     async def async_set_eco_mode(self, eco_mode: bool):
         """Set water heater eco_mode"""
-        await self.api.async_set_evo_eco_mode(self.gw,eco_mode)
+        await self.api.async_set_evo_eco_mode(self.gw, eco_mode)
         self.data[EvoDeviceProperties.ECO] = eco_mode
 
     async def async_set_antilegionella(self, anti_leg: bool):
@@ -97,14 +103,12 @@ class AristonEvoDevice(AristonVelisDevice):
 
     async def async_set_water_heater_operation_mode(self, operation_mode):
         """Set water heater operation mode"""
-        await self.api.async_set_evo_mode(
-            self.gw, EvoPlantMode[operation_mode]
-        )
+        await self.api.async_set_evo_mode(self.gw, EvoPlantMode[operation_mode])
         self.data[VelisDeviceProperties.MODE] = EvoPlantMode[operation_mode].value
 
     async def async_set_water_heater_temperature(self, temperature: float):
         """Set water heater temperature"""
-        await self.api.async_set_evo_temperature(self.gw,temperature)
+        await self.api.async_set_evo_temperature(self.gw, temperature)
         self.data[VelisDeviceProperties.REQ_TEMP] = temperature
 
     async def async_set_power(self, power: bool):

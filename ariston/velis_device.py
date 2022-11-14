@@ -5,8 +5,14 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .ariston import (AristonAPI, CustomDeviceFeatures, DeviceFeatures,
-                      VelisDeviceProperties)
+from .ariston import (
+    AristonAPI,
+    CustomDeviceFeatures,
+    DeviceFeatures,
+    VelisDeviceAttribute,
+    VelisDeviceProperties,
+    WheType,
+)
 from .device import AristonDevice
 
 _LOGGER = logging.getLogger(__name__)
@@ -14,6 +20,7 @@ _LOGGER = logging.getLogger(__name__)
 
 class AristonVelisDevice(AristonDevice, ABC):
     """Class representing a physical device, it's state and properties."""
+
     def __init__(
         self,
         api: AristonAPI,
@@ -22,6 +29,9 @@ class AristonVelisDevice(AristonDevice, ABC):
         super().__init__(api, attributes)
         self.plant_settings: dict[str, Any] = dict()
 
+    def get_whe_type(self) -> WheType:
+        """Get device whe type wrapper"""
+        return WheType(self.attributes.get(VelisDeviceAttribute.WHE_TYPE, WheType.Unknown))
 
     async def async_get_features(self) -> None:
         """Get device features wrapper"""

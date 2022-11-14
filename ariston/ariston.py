@@ -131,6 +131,7 @@ class Currency(IntFlag):
 class SystemType(IntFlag):
     """System type enum"""
 
+    UNKNOWN = -1
     GALILEO1 = 1
     GALILEO2 = 2
     GALEVO = 3
@@ -182,6 +183,7 @@ class LydosPlantMode(IntFlag):
 class WheType(IntFlag):
     """Whe type enum"""
 
+    Unknown = -1
     LydosHybrid = 2
     NuosSplit = 4
     Evo = 6
@@ -475,17 +477,23 @@ class AristonAPI:
 
     async def async_get_detailed_devices(self) -> list:
         """Get detailed cloud devices"""
-        return list(await self.get(f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}"))
+        return list(
+            await self.get(f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}")
+        )
 
     async def async_get_detailed_velis_devices(self) -> list:
         """Get detailed cloud devices"""
-        return list(await self.get(f"{ARISTON_API_URL}{ARISTON_VELIS}/{ARISTON_PLANTS}"))
+        return list(
+            await self.get(f"{ARISTON_API_URL}{ARISTON_VELIS}/{ARISTON_PLANTS}")
+        )
 
     async def async_get_devices(self) -> list:
         """Get cloud devices"""
-        return list(await self.get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{ARISTON_LITE}"
-        ))
+        return list(
+            await self.get(
+                f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_PLANTS}/{ARISTON_LITE}"
+            )
+        )
 
     async def async_get_features_for_device(self, gw_id: str) -> dict[str, Any]:
         """Get features for the device"""
@@ -499,13 +507,13 @@ class AristonAPI:
             f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_REPORTS}/{gw_id}/energyAccount"
         )
 
-    async def async_get_consumptions_sequences(
-        self, gw_id: str, usages: str
-    ) -> list:
+    async def async_get_consumptions_sequences(self, gw_id: str, usages: str) -> list:
         """Get consumption sequences for the device"""
-        return list(await self.get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_REPORTS}/{gw_id}/consSequencesApi8?usages={usages}"
-        ))
+        return list(
+            await self.get(
+                f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_REPORTS}/{gw_id}/consSequencesApi8?usages={usages}"
+            )
+        )
 
     async def async_get_consumptions_settings(self, gw_id: str) -> dict[str, Any]:
         """Get consumption settings"""
@@ -615,7 +623,9 @@ class AristonAPI:
             },
         )
 
-    async def async_set_evo_mode(self, gw_id: str, value: EvoPlantMode) -> dict[str, Any]:
+    async def async_set_evo_mode(
+        self, gw_id: str, value: EvoPlantMode
+    ) -> dict[str, Any]:
         """Set Velis Evo mode"""
         return await self.post(
             f"{ARISTON_API_URL}{ARISTON_VELIS}/{ARISTON_MED_PLANT_DATA}/{gw_id}/mode",
@@ -624,7 +634,9 @@ class AristonAPI:
             },
         )
 
-    async def async_set_lydos_mode(self, gw_id: str, value: LydosPlantMode) -> dict[str, Any]:
+    async def async_set_lydos_mode(
+        self, gw_id: str, value: LydosPlantMode
+    ) -> dict[str, Any]:
         """Set Velis Lydos mode"""
         return await self.post(
             f"{ARISTON_API_URL}{ARISTON_VELIS}/{ARISTON_SE_PLANT_DATA}/{gw_id}/mode",
@@ -633,7 +645,9 @@ class AristonAPI:
             },
         )
 
-    async def async_set_evo_temperature(self, gw_id: str, value: float) -> dict[str, Any]:
+    async def async_set_evo_temperature(
+        self, gw_id: str, value: float
+    ) -> dict[str, Any]:
         """Set Velis Evo temperature"""
         return await self.post(
             f"{ARISTON_API_URL}{ARISTON_VELIS}/{ARISTON_MED_PLANT_DATA}/{gw_id}/temperature",
@@ -642,7 +656,9 @@ class AristonAPI:
             },
         )
 
-    async def async_set_lydos_temperature(self, gw_id: str, value: float) -> dict[str, Any]:
+    async def async_set_lydos_temperature(
+        self, gw_id: str, value: float
+    ) -> dict[str, Any]:
         """Set Velis Lydos temperature"""
         return await self.post(
             f"{ARISTON_API_URL}{ARISTON_VELIS}/{ARISTON_SE_PLANT_DATA}/{gw_id}/temperature",
@@ -651,7 +667,9 @@ class AristonAPI:
             },
         )
 
-    async def async_set_evo_eco_mode(self, gw_id: str, eco_mode: bool) -> dict[str, Any]:
+    async def async_set_evo_eco_mode(
+        self, gw_id: str, eco_mode: bool
+    ) -> dict[str, Any]:
         """Set Velis Evo power"""
         return await self.post(
             f"{ARISTON_API_URL}{ARISTON_VELIS}/{ARISTON_MED_PLANT_DATA}/{gw_id}/switchEco",
@@ -770,7 +788,9 @@ class AristonAPI:
             return dict()
         return result
 
-    async def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def get(
+        self, path: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """GET request"""
         result = await self.__request("GET", path, params, None)
         if result is None:

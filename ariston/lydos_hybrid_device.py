@@ -3,9 +3,13 @@ from __future__ import annotations
 
 import logging
 
-from .ariston import (ConsumptionTimeInterval, ConsumptionType,
-                      DeviceAttribute, LydosPlantMode, SeDeviceSettings,
-                      VelisDeviceProperties)
+from .ariston import (
+    ConsumptionTimeInterval,
+    ConsumptionType,
+    LydosPlantMode,
+    SeDeviceSettings,
+    VelisDeviceProperties,
+)
 from .velis_device import AristonVelisDevice
 
 _LOGGER = logging.getLogger(__name__)
@@ -42,13 +46,17 @@ class AristonLydosHybridDevice(AristonVelisDevice):
         """Get water heater maximum setpoint temperature minimum"""
         if len(self.plant_settings) == 0:
             _LOGGER.exception("Call async_update_settings() first")
-        return self.plant_settings.get(SeDeviceSettings.SE_MAX_SETPOINT_TEMPERATURE_MIN, 0)
+        return self.plant_settings.get(
+            SeDeviceSettings.SE_MAX_SETPOINT_TEMPERATURE_MIN, 0
+        )
 
     def get_water_heater_maximum_setpoint_temperature_maximum(self) -> float:
         """Get water heater maximum setpoint maximum temperature"""
         if len(self.plant_settings) == 0:
             _LOGGER.exception("Call async_update_settings() first")
-        return self.plant_settings.get(SeDeviceSettings.SE_MAX_SETPOINT_TEMPERATURE_MAX, 0)
+        return self.plant_settings.get(
+            SeDeviceSettings.SE_MAX_SETPOINT_TEMPERATURE_MAX, 0
+        )
 
     def get_water_heater_maximum_setpoint_temperature(self) -> float:
         """Get water heater maximum setpoint temperature value"""
@@ -58,12 +66,12 @@ class AristonLydosHybridDevice(AristonVelisDevice):
 
     def get_electric_consumption_for_water_last_two_hours(self) -> int:
         """Get electric consumption for water last value"""
-        return self.get_consumption_sequence_last_value(
+        return self._get_consumption_sequence_last_value(
             ConsumptionType.DOMESTIC_HOT_WATER_HEATING_PUMP_ELECTRICITY,
             ConsumptionTimeInterval.LAST_DAY,
         )
 
-    async def async_get_consumptions_sequences(self) -> None:
+    async def _async_get_consumptions_sequences(self) -> None:
         """Get consumption sequence"""
         self.consumptions_sequences = await self.api.async_get_consumptions_sequences(
             self.gw,
@@ -89,7 +97,7 @@ class AristonLydosHybridDevice(AristonVelisDevice):
 
     async def async_set_water_heater_temperature(self, temperature: float):
         """Set water heater temperature"""
-        await self.api.async_set_lydos_temperature(self.gw,temperature)
+        await self.api.async_set_lydos_temperature(self.gw, temperature)
         self.data[VelisDeviceProperties.REQ_TEMP] = temperature
 
     async def async_set_power(self, power: bool):

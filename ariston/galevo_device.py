@@ -5,10 +5,20 @@ import logging
 from datetime import date
 from typing import Any
 
-from .ariston import (AristonAPI, ConsumptionProperties, Currency,
-                      CustomDeviceFeatures, DeviceAttribute, DeviceFeatures,
-                      DeviceProperties, GasEnergyUnit, GasType, PlantMode,
-                      PropertyType, ThermostatProperties, ZoneMode)
+from .ariston import (
+    AristonAPI,
+    ConsumptionProperties,
+    Currency,
+    CustomDeviceFeatures,
+    DeviceFeatures,
+    DeviceProperties,
+    GasEnergyUnit,
+    GasType,
+    PlantMode,
+    PropertyType,
+    ThermostatProperties,
+    ZoneMode,
+)
 from .device import AristonDevice
 
 _LOGGER = logging.getLogger(__name__)
@@ -16,18 +26,19 @@ _LOGGER = logging.getLogger(__name__)
 
 class AristonGalevoDevice(AristonDevice):
     """Class representing a physical device, it's state and properties."""
-    def __init__(        
+
+    def __init__(
         self,
         api: AristonAPI,
         attributes: dict[str, Any],
-        extra_energy_features: bool = True,
         is_metric: bool = True,
-        location: str = "en-US"
+        language_tag: str = "en-US",
     ) -> None:
         super().__init__(api, attributes)
-        self.extra_energy_features = extra_energy_features
         self.umsys = "si" if is_metric else "us"
-        self.location = location
+        self.language_tag = language_tag
+        self.consumptions_settings: dict[str, Any] = dict()
+        self.energy_account: dict[str, Any] = dict()
 
     async def async_update_state(self) -> None:
         """Update the device states from the cloud"""
@@ -37,7 +48,7 @@ class AristonGalevoDevice(AristonDevice):
         self.data = await self.api.async_get_properties(
             self.gw,
             self.features,
-            self.location,
+            self.language_tag,
             self.umsys,
         )
 
@@ -126,7 +137,7 @@ class AristonGalevoDevice(AristonDevice):
     @staticmethod
     def get_zone_number(zone_number: int) -> str:
         """Get zone number"""
-        return f'{zone_number}'
+        return f"{zone_number}"
 
     def get_holiday_expires_on(self) -> str:
         """Get holiday expires on"""
@@ -189,8 +200,8 @@ class AristonGalevoDevice(AristonDevice):
     def get_zone_mode(self, zone) -> ZoneMode:
         """Get zone mode on value"""
         zone_mode = self._get_item_by_id(
-                ThermostatProperties.ZONE_MODE, PropertyType.VALUE, zone
-            )
+            ThermostatProperties.ZONE_MODE, PropertyType.VALUE, zone
+        )
 
         if zone_mode is None:
             return ZoneMode.UNDEFINED
@@ -209,7 +220,9 @@ class AristonGalevoDevice(AristonDevice):
 
     def get_plant_mode(self) -> PlantMode:
         """Get plant mode on value"""
-        plant_mode = self._get_item_by_id(DeviceProperties.PLANT_MODE, PropertyType.VALUE)
+        plant_mode = self._get_item_by_id(
+            DeviceProperties.PLANT_MODE, PropertyType.VALUE
+        )
 
         if plant_mode is None:
             return PlantMode.UNDEFINED
@@ -289,7 +302,7 @@ class AristonGalevoDevice(AristonDevice):
             None,
         )
 
-    async def async_get_consumptions_sequences(self) -> None:
+    async def _async_get_consumptions_sequences(self) -> None:
         """Get consumption sequence"""
         self.consumptions_sequences = await self.api.async_get_consumptions_sequences(
             self.gw,
@@ -317,7 +330,7 @@ class AristonGalevoDevice(AristonDevice):
 
     async def async_set_gas_type(self, selected: str):
         """Set gas type"""
-        await self.async_set_consumptions_settings(
+        await self._async_set_consumptions_settings(
             ConsumptionProperties.GAS_TYPE, GasType[selected]
         )
 
@@ -334,7 +347,7 @@ class AristonGalevoDevice(AristonDevice):
 
     async def async_set_currency(self, selected: str):
         """Set currency"""
-        await self.async_set_consumptions_settings(
+        await self._async_set_consumptions_settings(
             ConsumptionProperties.CURRENCY, Currency[selected]
         )
 
@@ -351,7 +364,7 @@ class AristonGalevoDevice(AristonDevice):
 
     async def async_set_gas_energy_unit(self, selected: str):
         """Set gas energy unit"""
-        await self.async_set_consumptions_settings(
+        await self._async_set_consumptions_settings(
             ConsumptionProperties.GAS_ENERGY_UNIT, GasEnergyUnit[selected]
         )
 
@@ -385,17 +398,17 @@ class AristonGalevoDevice(AristonDevice):
 
     async def async_set_elect_cost(self, value: float):
         """Set electric cost"""
-        await self.async_set_consumptions_settings(
+        await self._async_set_consumptions_settings(
             ConsumptionProperties.ELEC_COST, value
         )
 
     async def async_set_gas_cost(self, value: float):
         """Set gas cost"""
-        await self.async_set_consumptions_settings(
+        await self._async_set_consumptions_settings(
             ConsumptionProperties.GAS_COST, value
         )
 
-    async def async_set_consumptions_settings(
+    async def _async_set_consumptions_settings(
         self, consumption_property: str, value: float
     ):
         """Set consumption settings"""
@@ -465,7 +478,7 @@ class AristonGalevoDevice(AristonDevice):
             None if holiday_end is None else holiday_end.strftime("%Y-%m-%dT00:00:00")
         )
 
-        await self.api.async_set_holiday(self.gw,holiday_end_date)
+        await self.api.async_set_holiday(self.gw, holiday_end_date)
 
         for item in self.data.get("items", dict()):
             if item.get("id") == DeviceProperties.HOLIDAY:
@@ -479,17 +492,9 @@ class AristonGalevoDevice(AristonDevice):
         """Update the device energy settings from the cloud"""
         await super().async_update_energy()
 
-        if self.extra_energy_features:
-            # These settings only for official clients
-            self.consumptions_settings = await self.api.async_get_consumptions_settings(self.gw)
-            # Last month consumption in kwh
-            self.energy_account = await self.api.async_get_energy_account(self.gw)
-
-    def are_device_features_available(        
-        self, device_features, extra_energy_feature, system_types
-    ) -> bool:
-        """Checks features availability"""
-        if extra_energy_feature and not self.extra_energy_features:
-            return False
-        return super().are_device_features_available(device_features, system_types)
-
+        # These settings only for official clients
+        self.consumptions_settings = await self.api.async_get_consumptions_settings(
+            self.gw
+        )
+        # Last month consumption in kwh
+        self.energy_account = await self.api.async_get_energy_account(self.gw)

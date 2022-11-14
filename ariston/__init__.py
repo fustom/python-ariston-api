@@ -1,9 +1,13 @@
 """Ariston module"""
 import logging
 
-from .ariston import (AristonAPI, DeviceAttribute, SystemType,
-                      VelisDeviceAttribute, WheType)
-from .device import AristonDevice
+from .ariston import (
+    AristonAPI,
+    DeviceAttribute,
+    SystemType,
+    VelisDeviceAttribute,
+    WheType,
+)
 from .evo_device import AristonEvoDevice
 from .galevo_device import AristonGalevoDevice
 from .lydos_hybrid_device import AristonLydosHybridDevice
@@ -13,6 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 
 class Ariston:
     """Ariston class"""
+
     def __init__(self) -> None:
         self.api = None
         self.cloud_devices: list[dict] = []
@@ -24,7 +29,7 @@ class Ariston:
 
     async def async_discover(self):
         """Retreive ariston devices from the cloud"""
-        if self.api is None: 
+        if self.api is None:
             _LOGGER.exception("Call async_connect first")
             return None
         cloud_devices: list[dict] = []
@@ -33,9 +38,9 @@ class Ariston:
         self.cloud_devices = cloud_devices
         return cloud_devices
 
-    async def async_hello(self, gateway: str, extra_energy_features=True, is_metric=True, location="en-US"):
+    async def async_hello(self, gateway: str, is_metric=True, language_tag="en-US"):
         """Get ariston device"""
-        if self.api is None: 
+        if self.api is None:
             _LOGGER.exception("Call async_connect() first")
             return
 
@@ -51,7 +56,7 @@ class Ariston:
             None,
         )
         if device is None:
-            _LOGGER.exception(f"No device \"{gateway}\" found.")
+            _LOGGER.exception(f'No device "{gateway}" found.')
             return None
 
         system_type = device.get(DeviceAttribute.SYS)
@@ -59,9 +64,8 @@ class Ariston:
             return AristonGalevoDevice(
                 self.api,
                 device,
-                extra_energy_features,
                 is_metric,
-                location,
+                language_tag,
             )
         if system_type == SystemType.VELIS:
             whe_type = device.get(VelisDeviceAttribute.WHE_TYPE)
