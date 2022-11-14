@@ -46,6 +46,7 @@ password: Your ariston cloud password
 
 ## Discovery
 Use this function to discover devices. You can skip this step if you already know the gateway id.
+
 Sync
 ```python3
 devices = asyncio.run(ariston.async_discover())
