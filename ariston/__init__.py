@@ -14,7 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 class Ariston:
     """Ariston class"""
     def __init__(self) -> None:
-        self.api: AristonAPI | None = None
+        self.api = None
         self.cloud_devices: list[dict] = []
 
     async def async_connect(self, username: str, password: str) -> bool:
@@ -22,20 +22,18 @@ class Ariston:
         self.api = AristonAPI(username, password)
         return await self.api.async_connect()
 
-    async def async_discover(self) -> list | None:
+    async def async_discover(self):
         """Retreive ariston devices from the cloud"""
         if self.api is None: 
             _LOGGER.exception("Call async_connect first")
-            return
+            return None
         cloud_devices: list[dict] = []
         cloud_devices.extend(await self.api.async_get_detailed_devices())
         cloud_devices.extend(await self.api.async_get_detailed_velis_devices())
         self.cloud_devices = cloud_devices
         return cloud_devices
 
-    async def async_hello(
-        self, gateway: str, extra_energy_features=True, is_metric=True, location="en-US"
-    ) -> AristonDevice | None:
+    async def async_hello(self, gateway: str, extra_energy_features=True, is_metric=True, location="en-US"):
         """Get ariston device"""
         if self.api is None: 
             _LOGGER.exception("Call async_connect() first")
