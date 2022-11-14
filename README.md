@@ -40,8 +40,9 @@ Async
 ```python3
 await ariston.async_connect("username", "password")
 ```
-username: your ariston cloud username
-password: your ariston cloud password
+username: Your ariston cloud username
+
+password: Your ariston cloud password
 
 ## Discovery
 Use this function to discover devices. You can skip this step if you already know the gateway id.
@@ -67,5 +68,7 @@ devices = await ariston.async_hello("gateway", is_metric, "location")
 ```
 
 gateway: You can find the value in the returned discover dictionary name 'gw'
+
 is_metric: True or False. True means metric, False means imperial. Only works with Galevo (Alteas One, Genus One, etc) system. Default is True.
+
 language_tag: Check https://en.wikipedia.org/wiki/IETF_language_tag Only works with Galevo (Alteas One, Genus One, etc) system. Default is "en-US".
