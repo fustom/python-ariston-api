@@ -34,7 +34,7 @@ import asyncio
 
 Sync
 ```python3
-asyncio.run(ariston.async_connect("", ""))
+asyncio.run(ariston.async_connect("username", "password"))
 ```
 Async
 ```python3
