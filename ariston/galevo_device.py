@@ -286,6 +286,78 @@ class AristonGalevoDevice(AristonDevice):
             ThermostatProperties.ZONE_COMFORT_TEMP, PropertyType.VALUE, zone
         )
 
+    def get_heating_flow_offset_value(self, zone) -> int:
+        """Get zone heating flow offset value"""
+        return self._get_item_by_id(
+            ThermostatProperties.HEATING_FLOW_OFFSET, PropertyType.VALUE, zone
+        )
+
+    def get_heating_flow_offset_unit(self, zone) -> int:
+        """Get zone heating flow offset unit"""
+        return self._get_item_by_id(
+            ThermostatProperties.HEATING_FLOW_OFFSET, PropertyType.UNIT, zone
+        )
+
+    def get_heating_flow_offset_step(self, zone) -> int:
+        """Get zone heating flow offset step"""
+        return self._get_item_by_id(
+            ThermostatProperties.HEATING_FLOW_OFFSET, PropertyType.STEP, zone
+        )
+
+    def get_heating_flow_offset_max(self, zone) -> int:
+        """Get zone heating flow offset max"""
+        return self._get_item_by_id(
+            ThermostatProperties.HEATING_FLOW_OFFSET, PropertyType.MAX, zone
+        )
+
+    def get_heating_flow_offset_min(self, zone) -> int:
+        """Get zone heating flow offset min"""
+        return self._get_item_by_id(
+            ThermostatProperties.HEATING_FLOW_OFFSET, PropertyType.MIN, zone
+        )
+
+    def get_heating_flow_offset_decimals(self, zone) -> int:
+        """Get zone heating flow offset decimals"""
+        return self._get_item_by_id(
+            ThermostatProperties.HEATING_FLOW_OFFSET, PropertyType.DECIMALS, zone
+        )
+
+    def get_heating_flow_temp_value(self, zone) -> int:
+        """Get zone heating flow temp value"""
+        return self._get_item_by_id(
+            ThermostatProperties.HEATING_FLOW_TEMP, PropertyType.VALUE, zone
+        )
+
+    def get_heating_flow_temp_unit(self, zone) -> int:
+        """Get zone heating flow temp unit"""
+        return self._get_item_by_id(
+            ThermostatProperties.HEATING_FLOW_TEMP, PropertyType.UNIT, zone
+        )
+
+    def get_heating_flow_temp_step(self, zone) -> int:
+        """Get zone heating flow temp step"""
+        return self._get_item_by_id(
+            ThermostatProperties.HEATING_FLOW_TEMP, PropertyType.STEP, zone
+        )
+
+    def get_heating_flow_temp_max(self, zone) -> int:
+        """Get zone heating flow temp max"""
+        return self._get_item_by_id(
+            ThermostatProperties.HEATING_FLOW_TEMP, PropertyType.MAX, zone
+        )
+
+    def get_heating_flow_temp_min(self, zone) -> int:
+        """Get zone heating flow temp min"""
+        return self._get_item_by_id(
+            ThermostatProperties.HEATING_FLOW_TEMP, PropertyType.MIN, zone
+        )
+
+    def get_heating_flow_temp_decimals(self, zone) -> int:
+        """Get zone heating flow temp decimals"""
+        return self._get_item_by_id(
+            ThermostatProperties.HEATING_FLOW_TEMP, PropertyType.DECIMALS, zone
+        )
+
     def _get_item_by_id(
         self, item_id: str, item_value: str, zone_number: int = 0
     ) -> Any:
@@ -448,6 +520,18 @@ class AristonGalevoDevice(AristonDevice):
         """Set comfort temp"""
         await self.async_set_item_by_id(
             ThermostatProperties.ZONE_COMFORT_TEMP, temp, zone
+        )
+
+    async def async_set_heating_flow_temp(self, temp: float, zone):
+        """Set heating flow temp"""
+        await self.async_set_item_by_id(
+            ThermostatProperties.HEATING_FLOW_TEMP, temp, zone
+        )
+
+    async def async_set_heating_flow_offset(self, offset: float, zone):
+        """Set heating flow offset"""
+        await self.async_set_item_by_id(
+            ThermostatProperties.HEATING_FLOW_OFFSET, offset, zone
         )
 
     async def async_set_item_by_id(
