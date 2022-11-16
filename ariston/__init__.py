@@ -1,5 +1,6 @@
 """Ariston module"""
 import logging
+from asyncio import gather
 
 from .ariston import (
     AristonAPI,
@@ -31,10 +32,13 @@ class Ariston:
         """Retreive ariston devices from the cloud"""
         if self.api is None:
             _LOGGER.exception("Call async_connect first")
-            return None
+            return None        
         cloud_devices: list[dict] = []
-        cloud_devices.extend(await self.api.async_get_detailed_devices())
-        cloud_devices.extend(await self.api.async_get_detailed_velis_devices())
+        cloud_devices_tuple = await gather(self.api.async_get_detailed_devices(), self.api.async_get_detailed_velis_devices())
+
+        for devices in cloud_devices_tuple:
+            cloud_devices.extend(devices)
+        
         self.cloud_devices = cloud_devices
         return cloud_devices
 
