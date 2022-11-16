@@ -110,7 +110,7 @@ class AristonGalevoDevice(AristonDevice):
         """Get water heater temperature step"""
         return self._get_item_by_id(DeviceProperties.DHW_TEMP, PropertyType.STEP)
 
-    def get_water_heater_mode_opertation_texts(self) -> list[str]:
+    def get_water_heater_mode_operation_texts(self) -> list[str]:
         """Get water heater operation mode texts"""
         return self._get_item_by_id(DeviceProperties.DHW_MODE, PropertyType.OPT_TEXTS)
 
