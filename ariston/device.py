@@ -87,6 +87,56 @@ class AristonDevice(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def get_water_heater_current_temperature(self) -> float:
+        """Abstract method for get water heater current temperature"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_water_heater_minimum_temperature(self) -> float:
+        """Abstract method for get water heater minimum temperature"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_water_heater_target_temperature(self) -> float:
+        """Abstract method for get water heater target temperature"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_water_heater_maximum_temperature(self) -> float:
+        """Abstract method for get water heater maximum temperature"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_water_heater_temperature_decimals(self) -> float:
+        """Abstract method for get water heater temperature decimals"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_water_heater_temperature_unit(self) -> str:
+        """Abstract method for get water heater temperature unit"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_water_heater_mode_operation_texts(self) -> str:
+        """Abstract method for get water heater operation texts"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_water_heater_mode_options(self) -> list[int]:
+        """Abstract method for get water heater mode options"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_water_heater_mode_value(self) -> int:
+        """Abstract method for get water heater mode value"""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def async_set_water_heater_temperature(self, temperature: float):
+        """Abstract method for set water temperature"""
+        raise NotImplementedError
+
+    @abstractmethod
     def get_water_heater_temperature_step(self) -> None:
         """Abstract method for get water heater temperature step"""
         raise NotImplementedError
