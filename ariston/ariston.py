@@ -389,10 +389,6 @@ class DeviceProperties:
     HEATING_CIRCUIT_PRESSURE: Final[str] = "HeatingCircuitPressure"
     CH_FLOW_TEMP: Final[str] = "ChFlowTemp"
     CH_FLOW_SETPOINT_TEMP: Final[str] = "ChFlowSetpointTemp"
-    HEATING_FLOW_TEMP: Final[str] = "HeatingFlowTemp"
-    HEATING_FLOW_OFFSET: Final[str] = "HeatingFlowOffset"
-    COOLING_FLOW_TEMP: Final[str] = "CoolingFlowTemp"
-    COOLING_FLOW_OFFSET: Final[str] = "CoolingFlowOffset"
     DHW_TEMP: Final[str] = "DhwTemp"
     DHW_STORAGE_TEMPERATURE: Final[str] = "DhwStorageTemperature"
     DHW_TIMEPROG_COMFORT_TEMP: Final[str] = "DhwTimeProgComfortTemp"
@@ -416,6 +412,10 @@ class ThermostatProperties:
     ZONE_DEROGA: Final[str] = "ZoneDeroga"
     ZONE_IS_ZONE_PILOT_ON: Final[str] = "IsZonePilotOn"
     ZONE_VIRT_TEMP_OFFSET_HEAT: Final[str] = "VirtTempOffsetHeat"
+    HEATING_FLOW_TEMP: Final[str] = "HeatingFlowTemp"
+    HEATING_FLOW_OFFSET: Final[str] = "HeatingFlowOffset"
+    COOLING_FLOW_TEMP: Final[str] = "CoolingFlowTemp"
+    COOLING_FLOW_OFFSET: Final[str] = "CoolingFlowOffset"
 
 
 class ConsumptionProperties:
