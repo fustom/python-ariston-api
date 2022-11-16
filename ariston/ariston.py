@@ -784,8 +784,6 @@ class AristonAPI:
     async def post(self, path: str, body: Any) -> dict[str, Any]:
         """POST request"""
         result = await self.__request("POST", path, None, body)
-        if result is None:
-            return dict()
         return result
 
     async def get(
@@ -793,6 +791,4 @@ class AristonAPI:
     ) -> dict[str, Any]:
         """GET request"""
         result = await self.__request("GET", path, params, None)
-        if result is None:
-            return dict()
         return result
