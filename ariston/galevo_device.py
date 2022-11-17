@@ -17,6 +17,7 @@ from .ariston import (
     PlantMode,
     PropertyType,
     ThermostatProperties,
+    ZoneAttribute,
     ZoneMode,
 )
 from .device import AristonDevice
@@ -78,6 +79,15 @@ class AristonGalevoDevice(AristonDevice):
             DeviceFeatures.HAS_BOILER
         )
 
+    def get_zones(self) -> list[dict[str, Any]]:
+        """Get device zones wrapper"""
+        if len(self.features) == 0:
+            _LOGGER.exception("Call async_get_features() first")
+        return self.features.get(DeviceFeatures.ZONES, list())
+
+    def get_zone_numbers(self) -> list:
+        return [zone.get(ZoneAttribute.NUM, 0) for zone in self.get_zones()]
+
     def get_water_heater_current_temperature(self) -> float:
         """Get water heater current temperature"""
         if self.custom_features.get(DeviceProperties.DHW_STORAGE_TEMPERATURE):
@@ -133,6 +143,48 @@ class AristonGalevoDevice(AristonDevice):
         return self._get_item_by_id(
             ThermostatProperties.ZONE_ECONOMY_TEMP, PropertyType.VALUE, zone_number
         )
+
+    def is_plant_in_heat_mode(self) -> bool:
+        """Is the plant in a heat mode"""
+        return self.get_plant_mode() in [
+            PlantMode.WINTER,
+            PlantMode.HEATING_ONLY,
+        ]
+
+    def is_plant_in_cool_mode(self) -> bool:
+        """Is the plant in a cool mode"""
+        return self.get_plant_mode() in [
+            PlantMode.COOLING,
+            PlantMode.COOLING_ONLY,
+        ]
+
+    def is_zone_in_manual_mode(self, zone) -> bool:
+        """Is zone in manual mode"""
+        return self.get_zone_mode(zone) in [
+            ZoneMode.MANUAL,
+            ZoneMode.MANUAL_NIGHT,
+        ]
+
+    def is_zone_in_time_program_mode(self, zone) -> bool:
+        """Is zone in time program mode"""
+        return self.get_zone_mode(zone) in [
+            ZoneMode.TIME_PROGRAM,
+        ]
+
+    def is_zone_mode_options_contains_manual(self, zone) -> bool:
+        return (ZoneMode.MANUAL or ZoneMode.MANUAL_NIGHT) in self.get_zone_mode_options(zone)
+
+    def is_zone_mode_options_contains_time_program(self, zone) -> bool:
+        return ZoneMode.TIME_PROGRAM in self.get_zone_mode_options(zone)
+
+    def is_zone_mode_options_contains_off(self, zone) -> bool:
+        return ZoneMode.OFF in self.get_zone_mode_options(zone)
+
+    def is_plant_mode_options_contains_off(self) -> bool:
+        return PlantMode.OFF in self.get_plant_mode_options()
+
+    def is_plant_mode_options_contains_cooling(self) -> bool:
+        return (PlantMode.COOLING or PlantMode.COOLING_ONLY) in self.get_plant_mode_options()
 
     @staticmethod
     def get_zone_number(zone_number: int) -> str:

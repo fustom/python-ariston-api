@@ -72,16 +72,19 @@ class AristonDevice(ABC):
         """Get device firmware version wrapper"""
         return self.attributes.get(GalevoDeviceAttribute.FW_VER, "")
 
-    def get_zones(self) -> list:
-        """Get device zones wrapper"""
-        if len(self.features) == 0:
-            _LOGGER.exception("Call async_get_features() first")
-        return self.features.get(DeviceFeatures.ZONES, list())
-
     async def async_get_features(self) -> None:
         """Get device features wrapper"""
         self.features = await self.api.async_get_features_for_device(self.gw)
 
+    def get_water_heater_current_mode_text(self) -> str:
+        """Get water heater current mode text"""
+        mode = self.get_water_heater_mode_value()
+        if mode in self.get_water_heater_mode_options():
+            index = self.get_water_heater_mode_options().index(mode)
+            return self.get_water_heater_mode_operation_texts()[index]
+        return self.get_water_heater_mode_operation_texts()[0]
+
+    @abstractmethod
     async def async_update_state(self) -> None:
         """Update the device states from the cloud"""
         raise NotImplementedError
@@ -117,7 +120,7 @@ class AristonDevice(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_mode_operation_texts(self) -> str:
+    def get_water_heater_mode_operation_texts(self) -> list[str]:
         """Abstract method for get water heater operation texts"""
         raise NotImplementedError
 

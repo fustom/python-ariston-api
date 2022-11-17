@@ -156,6 +156,7 @@ class Brands(IntFlag):
 class EvoPlantMode(IntFlag):
     """Evo plant mode enum"""
 
+    UNDEFINED = -1
     MANUAL = 1
     PROGRAM = 5
 
@@ -164,6 +165,7 @@ class EvoPlantMode(IntFlag):
 class VelisPlantMode(IntFlag):
     """Velis plant mode enum"""
 
+    UNDEFINED = -1
     MANUAL = 1
     PROGRAM = 5
     NIGHT = 8
@@ -173,6 +175,7 @@ class VelisPlantMode(IntFlag):
 class LydosPlantMode(IntFlag):
     """Lydos hybrid plant mode enum"""
 
+    UNDEFINED = -1
     IMEMORY = 1
     GREEN = 2
     PROGRAM = 6
