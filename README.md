@@ -1,3 +1,5 @@
+[![CodeQL](https://github.com/fustom/python-ariston-api/actions/workflows/codeql.yml/badge.svg)](https://github.com/fustom/python-ariston-api/actions/workflows/codeql.yml) [![Upload Python Package](https://github.com/fustom/python-ariston-api/actions/workflows/python-publish.yml/badge.svg)](https://github.com/fustom/python-ariston-api/actions/workflows/python-publish.yml)
+
 # python-ariston-api
 A Python module for controlling Ariston devices with cloud polling.
 The following devices are currently supported:
