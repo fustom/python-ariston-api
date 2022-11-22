@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Optional
 
-from .ariston import (
-    AristonAPI,
+from .ariston_api import AristonAPI
+from .const import (
     CustomDeviceFeatures,
     DeviceFeatures,
     VelisDeviceAttribute,
@@ -31,14 +31,28 @@ class AristonVelisDevice(AristonDevice, ABC):
 
     def get_whe_type(self) -> WheType:
         """Get device whe type wrapper"""
-        return WheType(self.attributes.get(VelisDeviceAttribute.WHE_TYPE, WheType.Unknown))
+        return WheType(
+            self.attributes.get(VelisDeviceAttribute.WHE_TYPE, WheType.Unknown)
+        )
+
+    def get_features(self) -> None:
+        """Get device features wrapper"""
+        super().get_features()
+        self.custom_features[CustomDeviceFeatures.HAS_DHW] = True
+        self.features[DeviceFeatures.DHW_MODE_CHANGEABLE] = True
+        self.update_settings()
 
     async def async_get_features(self) -> None:
-        """Get device features wrapper"""
+        """Async get device features wrapper"""
         await super().async_get_features()
         self.custom_features[CustomDeviceFeatures.HAS_DHW] = True
         self.features[DeviceFeatures.DHW_MODE_CHANGEABLE] = True
         await self.async_update_settings()
+
+    @abstractmethod
+    def update_settings(self) -> None:
+        """Get device settings wrapper"""
+        raise NotImplementedError
 
     @abstractmethod
     async def async_update_settings(self) -> None:
@@ -46,82 +60,68 @@ class AristonVelisDevice(AristonDevice, ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_anti_leg_value(self) -> bool:
+    def get_water_anti_leg_value(self) -> Optional[bool]:
         """Get water heater anti-legionella value"""
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_maximum_setpoint_temperature_minimum(self) -> float:
+    def get_water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
         """Get water heater maximum setpoint temperature minimum"""
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_maximum_setpoint_temperature_maximum(self) -> float:
+    def get_water_heater_maximum_setpoint_temperature_maximum(self) -> Optional[float]:
         """Get water heater maximum setpoint maximum temperature"""
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_maximum_setpoint_temperature(self) -> float:
+    def get_water_heater_maximum_setpoint_temperature(self) -> Optional[float]:
         """Get water heater maximum setpoint temperature value"""
         raise NotImplementedError
 
-    def get_water_heater_current_temperature(self) -> float | None:
+    def get_water_heater_current_temperature(self) -> Optional[float]:
         """Get water heater current temperature"""
-        if len(self.data) == 0:
-            _LOGGER.exception("Call async_update_state() first")
-        return self.data.get(VelisDeviceProperties.TEMP)
+        return self.data.get(VelisDeviceProperties.TEMP, None)
 
     def get_water_heater_minimum_temperature(self) -> float:
         """Get water heater minimum temperature"""
         return 40.0
 
-    def get_water_heater_maximum_temperature(self) -> float:
+    def get_water_heater_maximum_temperature(self) -> Optional[float]:
         """Get water heater maximum temperature"""
         return self.get_water_heater_maximum_setpoint_temperature()
 
-    def get_water_heater_target_temperature(self) -> float | None:
+    def get_water_heater_target_temperature(self) -> Optional[float]:
         """Get water heater target temperature"""
-        if len(self.data) == 0:
-            _LOGGER.exception("Call async_update_state() first")
-        return self.data.get(VelisDeviceProperties.REQ_TEMP)
+        return self.data.get(VelisDeviceProperties.REQ_TEMP, None)
 
     def get_water_heater_temperature_step(self) -> int:
         """Get water heater temperature step"""
         return 1
 
-    @staticmethod
-    def get_water_heater_temperature_decimals() -> int:
+    def get_water_heater_temperature_decimals(self) -> int:
         """Get water heater temperature decimals"""
         return 0
 
-    @staticmethod
-    def get_water_heater_temperature_unit() -> str:
+    def get_water_heater_temperature_unit(self) -> str:
         """Get water heater temperature unit"""
         return "°C"
 
-    def get_water_heater_mode_value(self) -> int | None:
+    def get_water_heater_mode_value(self) -> Optional[int]:
         """Get water heater mode value"""
-        if len(self.data) == 0:
-            _LOGGER.exception("Call async_update_state() first")
-        return self.data.get(VelisDeviceProperties.MODE)
+        return self.data.get(VelisDeviceProperties.MODE, None)
 
-    def get_av_shw_value(self) -> int | None:
+    def get_av_shw_value(self) -> Optional[int]:
         """Get average showers value"""
-        if len(self.data) == 0:
-            _LOGGER.exception("Call async_update_state() first")
-        return self.data.get(VelisDeviceProperties.AV_SHW)
+        return self.data.get(VelisDeviceProperties.AV_SHW, None)
 
-    def get_water_heater_power_value(self) -> bool | None:
+    def get_water_heater_power_value(self) -> Optional[bool]:
         """Get water heater power value"""
-        if len(self.data) == 0:
-            _LOGGER.exception("Call async_update_state() first")
-        return self.data.get(VelisDeviceProperties.ON)
+        return self.data.get(VelisDeviceProperties.ON, None)
 
-    def get_is_heating(self) -> bool | None:
+    def get_is_heating(self) -> Optional[bool]:
         """Get is the water heater heating"""
-        if len(self.data) == 0:
-            _LOGGER.exception("Call async_update_state() first")
-        return self.data.get(VelisDeviceProperties.HEAT_REQ)
+        return self.data.get(VelisDeviceProperties.HEAT_REQ, None)
 
     @staticmethod
     def get_empty_unit() -> str:
@@ -129,16 +129,31 @@ class AristonVelisDevice(AristonDevice, ABC):
         return ""
 
     @abstractmethod
-    async def async_set_antilegionella(self, anti_leg: bool):
+    def set_antilegionella(self, anti_leg: bool) -> None:
         """Set water heater anti-legionella"""
         raise NotImplementedError
 
     @abstractmethod
-    async def async_set_water_heater_temperature(self, temperature: float):
+    async def async_set_antilegionella(self, anti_leg: bool) -> None:
+        """Async set water heater anti-legionella"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_water_heater_temperature(self, temperature: float) -> None:
         """Set water heater temperature"""
         raise NotImplementedError
 
     @abstractmethod
-    async def async_set_power(self, power: bool):
+    async def async_set_water_heater_temperature(self, temperature: float) -> None:
+        """Async set water heater temperature"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_power(self, power: bool) -> None:
         """Set water heater power"""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def async_set_power(self, power: bool) -> None:
+        """Async set water heater power"""
         raise NotImplementedError

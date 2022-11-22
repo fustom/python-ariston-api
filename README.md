@@ -12,7 +12,35 @@ Use pip3 to install the latest version of this module.
 pip3 install ariston
 ```
 
-## Basic functions
+## The easy way (recommended for testing the module)
+First, open Python 3 and import ariston module.
+```
+python3
+```
+```python3
+import ariston
+```
+### Syncronous
+Discover devices if you dont know your gateway id. You can skip this step.
+```python3
+raw_devices = ariston.discover("username", "password")
+```
+For example the gateway id for your first device.
+```python3
+ raw_devices[0]['gw']
+```
+Get your device
+```python3
+device = ariston.hello("username", "password", "gateway", is_metric, "location")
+```
+[Go use your device section](https://github.com/fustom/python-ariston-api/edit/main/README.md#Use-your-device)
+### Asyncronous
+```python3
+raw_devices = await ariston.async_discover("username", "password")
+device = await ariston.async_hello("username", "password", "gateway", is_metric, "location")
+```
+[Go use your device section](https://github.com/fustom/python-ariston-api/edit/main/README.md#Use-your-device)
+## The ariston class way (recommended for integrate the module)
 First, open Python 3 and import Ariston class from this module.
 ```
 python3
@@ -26,7 +54,7 @@ ariston = Ariston()
 ```
 Now let's try some functions
 
-## Connect
+### Connect
 The cloud requests are asynchronous, so if you call them from a synchronous function or not even from function, you should use asyncio.
 ```python3
 import asyncio
@@ -43,7 +71,7 @@ await ariston.async_connect("username", "password")
 - username: Your ariston cloud username.
 - password: Your ariston cloud password.
 
-## Discovery
+### Discovery
 Use this function to discover devices. You can skip this step if you already know the gateway id.
 
 Sync
@@ -69,3 +97,32 @@ device = await ariston.async_hello("gateway", is_metric, "location")
 - gateway: You can find the value in the returned discover dictionary name 'gw'
 - is_metric: Optional. True or False. True means metric, False means imperial. Only works with Galevo (Alteas One, Genus One, etc) system. Default is True.
 - language_tag: Optional. Check https://en.wikipedia.org/wiki/IETF_language_tag Only works with Galevo (Alteas One, Genus One, etc) system. Default is "en-US".
+
+## Use your device
+### Get device features
+Sync
+```python3
+device.get_features()
+```
+Async
+```python3
+await device.async_get_features()
+```
+### Get device data
+Sync
+```python3
+device.update_state()
+```
+Async
+```python3
+await device.async_update_state()
+```
+### Get device energy
+Sync
+```python3
+device.update_energy()
+```
+Async
+```python3
+await device.async_update_energy()
+```

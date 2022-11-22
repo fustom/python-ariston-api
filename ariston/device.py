@@ -4,17 +4,18 @@ from __future__ import annotations
 import datetime as dt
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Optional
 
-from .ariston import (
-    AristonAPI,
+from .ariston_api import AristonAPI
+from .const import (
     ConsumptionTimeInterval,
     ConsumptionType,
-    DeviceAttribute,
     DeviceFeatures,
+    DeviceAttribute,
     GalevoDeviceAttribute,
     SystemType,
     VelisDeviceAttribute,
+    WheType,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,35 +49,37 @@ class AristonDevice(ABC):
         """Get device gateway wrapper"""
         return self.gw
 
-    def get_has_metering(self) -> bool:
+    def get_has_metering(self) -> Optional[bool]:
         """Get device has metering wrapper"""
-        if len(self.features) == 0:
-            _LOGGER.exception("Call async_get_features() first")
-        return self.features.get(DeviceFeatures.HAS_METERING, False)
+        return self.features.get(DeviceFeatures.HAS_METERING, None)
 
-    def get_name(self) -> str:
+    def get_name(self) -> Optional[str]:
         """Get device name wrapper"""
-        return self.attributes.get(DeviceAttribute.NAME, "")
+        return self.attributes.get(DeviceAttribute.NAME, None)
 
-    def get_dhw_mode_changeable(self) -> bool:
+    def get_dhw_mode_changeable(self) -> Optional[bool]:
         """Get device domestic hot water mode changeable wrapper"""
-        if len(self.features) == 0:
-            _LOGGER.exception("Call async_get_features() first")
-        return self.features.get(DeviceFeatures.DHW_MODE_CHANGEABLE, False)
+        return self.features.get(DeviceFeatures.DHW_MODE_CHANGEABLE, None)
 
-    def get_serial_number(self) -> str:
+    def get_serial_number(self) -> Optional[str]:
         """Get device serial number wrapper"""
-        return self.attributes.get(DeviceAttribute.SN, "")
+        return self.attributes.get(DeviceAttribute.SN, None)
 
-    def get_firmware_version(self) -> str:
+    def get_firmware_version(self) -> Optional[str]:
         """Get device firmware version wrapper"""
-        return self.attributes.get(GalevoDeviceAttribute.FW_VER, "")
+        return self.attributes.get(GalevoDeviceAttribute.FW_VER, None)
+
+    def get_features(self) -> None:
+        """Get device features wrapper"""
+        self.features = self.api.get_features_for_device(self.gw)
 
     async def async_get_features(self) -> None:
-        """Get device features wrapper"""
-        self.features = await self.api.async_get_features_for_device(self.gw)
+        """Async get device features wrapper"""
+        features = await self.api.async_get_features_for_device(self.gw)
+        if features is not None:
+            self.features = features
 
-    def get_water_heater_current_mode_text(self) -> str:
+    def get_water_heater_current_mode_text(self) -> Optional[str]:
         """Get water heater current mode text"""
         mode = self.get_water_heater_mode_value()
         if mode in self.get_water_heater_mode_options():
@@ -85,12 +88,17 @@ class AristonDevice(ABC):
         return self.get_water_heater_mode_operation_texts()[0]
 
     @abstractmethod
-    async def async_update_state(self) -> None:
+    def update_state(self) -> None:
         """Update the device states from the cloud"""
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_current_temperature(self) -> float:
+    async def async_update_state(self) -> None:
+        """Async update the device states from the cloud"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_water_heater_current_temperature(self) -> Optional[float]:
         """Abstract method for get water heater current temperature"""
         raise NotImplementedError
 
@@ -100,17 +108,17 @@ class AristonDevice(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_target_temperature(self) -> float:
+    def get_water_heater_target_temperature(self) -> Optional[float]:
         """Abstract method for get water heater target temperature"""
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_maximum_temperature(self) -> float:
+    def get_water_heater_maximum_temperature(self) -> Optional[float]:
         """Abstract method for get water heater maximum temperature"""
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_temperature_decimals(self) -> float:
+    def get_water_heater_temperature_decimals(self) -> int:
         """Abstract method for get water heater temperature decimals"""
         raise NotImplementedError
 
@@ -120,27 +128,32 @@ class AristonDevice(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_mode_operation_texts(self) -> list[str]:
+    def get_water_heater_mode_operation_texts(self) -> list[Optional[str]]:
         """Abstract method for get water heater operation texts"""
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_mode_options(self) -> list[int]:
+    def get_water_heater_mode_options(self) -> list[Optional[int]]:
         """Abstract method for get water heater mode options"""
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_mode_value(self) -> int:
+    def get_water_heater_mode_value(self) -> Optional[int]:
         """Abstract method for get water heater mode value"""
         raise NotImplementedError
 
     @abstractmethod
-    async def async_set_water_heater_temperature(self, temperature: float):
+    def set_water_heater_temperature(self, temperature: float) -> None:
         """Abstract method for set water temperature"""
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_temperature_step(self) -> None:
+    async def async_set_water_heater_temperature(self, temperature: float) -> None:
+        """Abstract method for async set water temperature"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_water_heater_temperature_step(self) -> int:
         """Abstract method for get water heater temperature step"""
         raise NotImplementedError
 
@@ -210,25 +223,24 @@ class AristonDevice(ABC):
         time_interval: ConsumptionTimeInterval,
     ) -> Any:
         """Get last value for consumption sequence"""
-        if len(self.consumptions_sequences) == 0:
-            _LOGGER.exception("Call async_update_energy() first")
-            return None
         for sequence in self.consumptions_sequences:
             if sequence["k"] == consumption_type and sequence["p"] == time_interval:
                 return sequence["v"][-1]
 
-        return "nan"
+        return None
 
     @abstractmethod
-    async def _async_get_consumptions_sequences(self) -> dict[str, Any]:
+    def _get_consumptions_sequences(self) -> None:
         """Get consumption sequence"""
         raise NotImplementedError
 
-    async def async_update_energy(self) -> None:
-        """Update the device energy settings from the cloud"""
-        old_consumptions_sequences = self.consumptions_sequences
-        await self._async_get_consumptions_sequences()
+    @abstractmethod
+    async def _async_get_consumptions_sequences(self) -> None:
+        """Async get consumption sequence"""
+        raise NotImplementedError
 
+    def _update_energy(self, old_consumptions_sequences: list[dict[str, Any]]) -> None:
+        """Update the device energy settings"""
         if (
             self.custom_features.get(
                 ConsumptionType.DOMESTIC_HOT_WATER_ELECTRICITY.name
@@ -246,6 +258,18 @@ class AristonDevice(ABC):
                 dt.timezone.utc
             ) - dt.timedelta(hours=1)
 
+    def update_energy(self) -> None:
+        """Update the device energy settings from the cloud"""
+        old_consumptions_sequences = self.consumptions_sequences
+        self._get_consumptions_sequences()
+        self._update_energy(old_consumptions_sequences)
+
+    async def async_update_energy(self) -> None:
+        """Async update the device energy settings from the cloud"""
+        old_consumptions_sequences = self.consumptions_sequences
+        await self._async_get_consumptions_sequences()
+        self._update_energy(old_consumptions_sequences)
+
     def _set_energy_features(self):
         """Set energy features"""
         for consumption_type in ConsumptionType:
@@ -255,13 +279,17 @@ class AristonDevice(ABC):
                         consumption_type,
                         ConsumptionTimeInterval.LAST_DAY,
                     )
-                    != "nan"
+                    != None
                 ):
                     self.custom_features[consumption_type.name] = True
                 else:
                     self.custom_features[consumption_type.name] = False
 
-    def are_device_features_available(self, device_features, system_types) -> bool:
+    def are_device_features_available(
+        self,
+        device_features: Optional[list[DeviceFeatures]],
+        system_types: Optional[list[SystemType | WheType]],
+    ) -> bool:
         """Checks features availability"""
         if (
             system_types is not None
@@ -273,8 +301,8 @@ class AristonDevice(ABC):
         if device_features is not None:
             for device_feature in device_features:
                 if (
-                    self.features.get(device_feature) is not True
-                    and self.custom_features.get(device_feature) is not True
+                    self.features.get(str(device_feature)) is not True
+                    and self.custom_features.get(str(device_feature)) is not True
                 ):
                     return False
 
