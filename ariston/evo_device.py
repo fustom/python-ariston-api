@@ -34,11 +34,11 @@ class AristonEvoDevice(AristonVelisDevice):
         """Async get device settings wrapper"""
         self.plant_settings = await self.api.async_get_med_plant_settings(self.gw)
 
-    def get_water_heater_mode_operation_texts(self) -> list[Optional[str]]:
+    def get_water_heater_mode_operation_texts(self) -> list[str]:
         """Get water heater operation mode texts"""
         return [flag.name for flag in EvoPlantMode]
 
-    def get_water_heater_mode_options(self) -> list[Optional[int]]:
+    def get_water_heater_mode_options(self) -> list[int]:
         """Get water heater operation options"""
         return [flag.value for flag in EvoPlantMode]
 

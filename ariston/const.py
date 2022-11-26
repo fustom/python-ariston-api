@@ -1,4 +1,4 @@
-from enum import IntFlag, unique
+from enum import Enum, IntFlag, unique
 from typing import Final
 
 ARISTON_API_URL: Final[str] = "https://www.ariston-net.remotethermo.com/api/v2/"
@@ -145,29 +145,26 @@ class Brands(IntFlag):
 
 
 @unique
-class EvoPlantMode(IntFlag):
+class EvoPlantMode(Enum):
     """Evo plant mode enum"""
 
-    UNDEFINED = -1
     MANUAL = 1
     PROGRAM = 5
 
 
 @unique
-class VelisPlantMode(IntFlag):
+class VelisPlantMode(Enum):
     """Velis plant mode enum"""
 
-    UNDEFINED = -1
     MANUAL = 1
     PROGRAM = 5
     NIGHT = 8
 
 
 @unique
-class LydosPlantMode(IntFlag):
+class LydosPlantMode(Enum):
     """Lydos hybrid plant mode enum"""
 
-    UNDEFINED = -1
     IMEMORY = 1
     GREEN = 2
     PROGRAM = 6

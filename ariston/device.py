@@ -79,13 +79,13 @@ class AristonDevice(ABC):
         if features is not None:
             self.features = features
 
-    def get_water_heater_current_mode_text(self) -> Optional[str]:
+    def get_water_heater_current_mode_text(self) -> str:
         """Get water heater current mode text"""
         mode = self.get_water_heater_mode_value()
         if mode in self.get_water_heater_mode_options():
             index = self.get_water_heater_mode_options().index(mode)
             return self.get_water_heater_mode_operation_texts()[index]
-        return self.get_water_heater_mode_operation_texts()[0]
+        return "UNKNOWN"
 
     @abstractmethod
     def update_state(self) -> None:
@@ -128,12 +128,12 @@ class AristonDevice(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_mode_operation_texts(self) -> list[Optional[str]]:
+    def get_water_heater_mode_operation_texts(self) -> list[str]:
         """Abstract method for get water heater operation texts"""
         raise NotImplementedError
 
     @abstractmethod
-    def get_water_heater_mode_options(self) -> list[Optional[int]]:
+    def get_water_heater_mode_options(self) -> list[int]:
         """Abstract method for get water heater mode options"""
         raise NotImplementedError
 
