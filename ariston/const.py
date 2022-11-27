@@ -12,6 +12,7 @@ ARISTON_ZONES: Final[str] = "zones"
 ARISTON_PLANT_DATA: Final[str] = "plantData"
 ARISTON_MED_PLANT_DATA: Final[str] = "medPlantData"
 ARISTON_SE_PLANT_DATA: Final[str] = "sePlantData"
+ARISTON_SLP_PLANT_DATA: Final[str] = "slpPlantData"
 ARISTON_REPORTS: Final[str] = "reports"
 ARISTON_TIME_PROGS: Final[str] = "timeProgs"
 
@@ -144,8 +145,12 @@ class Brands(IntFlag):
     Racold = 7
 
 
+class WaterHeaterMode(Enum):
+    """Base class for plant modes"""
+
+
 @unique
-class EvoPlantMode(Enum):
+class EvoPlantMode(WaterHeaterMode):
     """Evo plant mode enum"""
 
     MANUAL = 1
@@ -162,7 +167,25 @@ class VelisPlantMode(Enum):
 
 
 @unique
-class LydosPlantMode(Enum):
+class NuosSplitPlantMode(Enum):
+    """NuosSplit plant mode enum"""
+
+    MANUAL = 1
+    PROGRAM = 2
+
+
+@unique
+class NuosSplitOperativeMode(WaterHeaterMode):
+    """NuosSplit operative mode enum"""
+
+    GREEN = 0
+    COMFORT = 1
+    FAST = 2
+    IMEMORY = 3
+
+
+@unique
+class LydosPlantMode(WaterHeaterMode):
     """Lydos hybrid plant mode enum"""
 
     IMEMORY = 1
@@ -311,18 +334,34 @@ class DeviceFeatures:
 class VelisDeviceProperties:
     """Contants for Velis device properties"""
 
-    ANTI_LEG: Final[str] = "antiLeg"
-    AV_SHW: Final[str] = "avShw"
     GW: Final[str] = "gw"
-    HEAT_REQ: Final[str] = "heatReq"
     MODE: Final[str] = "mode"
     ON: Final[str] = "on"
     PROC_REQ_TEMP: Final[str] = "procReqTemp"
+
+
+class NuosSplitProperties(VelisDeviceProperties):
+    """Constants for NuosSplit device properties"""
+
+    WATER_TEMP: Final[str] = "waterTemp"
+    COMFORT_TEMP: Final[str] = "comfortTemp"
+    REDUCED_TEMP: Final[str] = "reducedTemp"
+    OP_MODE: Final[str] = "opMode"
+    BOOST_ON: Final[str] = "boostOn"
+    HP_STATE: Final[str] = "hpState"
+
+
+class EvoLydosDeviceProperties(VelisDeviceProperties):
+    """Constants for evo and lydos device properties"""
+
+    ANTI_LEG: Final[str] = "antiLeg"
+    AV_SHW: Final[str] = "avShw"
+    HEAT_REQ: Final[str] = "heatReq"
     REQ_TEMP: Final[str] = "reqTemp"
     TEMP: Final[str] = "temp"
 
 
-class EvoDeviceProperties(VelisDeviceProperties):
+class EvoDeviceProperties(EvoLydosDeviceProperties):
     """Contants for Velis Evo device properties"""
 
     ECO: Final[str] = "eco"
@@ -330,7 +369,7 @@ class EvoDeviceProperties(VelisDeviceProperties):
     RM_TM: Final[str] = "rmTm"
 
 
-class LydosDeviceProperties(VelisDeviceProperties):
+class LydosDeviceProperties(EvoLydosDeviceProperties):
     """Contants for Velis Lydos device properties"""
 
     BOOST_REQ_TEMP: Final[str] = "boostReqTemp"
@@ -367,6 +406,22 @@ class SeDeviceSettings:
     SE_NIGHT_END_AS_MINUTES: Final[str] = "SeNightEndAsMinutes"
     SE_NIGHT_END_MIN_AS_MINUTES: Final[str] = "SeNightEndMinAsMinutes"
     SE_NIGHT_END_MAX_AS_MINUTES: Final[str] = "SeNightEndMaxAsMinutes"
+
+
+class SlpDeviceSettings:
+    """Constatns for Slp device settings"""
+
+    SLP_MAX_GREEN_TEMPERATURE: Final[str] = "SlpMaxGreenTemperature"
+    SLP_MAX_SETPOINT_TEMPERATURE: Final[str] = "SlpMaxSetpointTemperature"
+    SLP_MAX_SETPOINT_TEMPERATURE_MIN: Final[str] = "SlpMaxSetpointTemperatureMin"
+    SLP_MAX_SETPOINT_TEMPERATURE_MAX: Final[str] = "SlpMaxSetpointTemperatureMax"
+    SLP_MIN_SETPOINT_TEMPERATURE: Final[str] = "SlpMinSetpointTemperature"
+    SLP_MIN_SETPOINT_TEMPERATURE_MIN: Final[str] = "SlpMinSetpointTemperatureMin"
+    SLP_MIN_SETPOINT_TEMPERATURE_MAX: Final[str] = "SlpMinSetpointTemperatureMax"
+    SLP_ANTILEGIONELLA_ON_OFF: Final[str] = "SlpAntilegionellaOnOff"
+    SLP_PRE_HEATING_ON_OFF: Final[str] = "SlpPreHeatingOnOff"
+    SLP_HEATING_RATE: Final[str] = "SlpHeatingRate"
+    SLP_HC_HP_MODE: Final[str] = "SlpHcHpMode"
 
 
 class DeviceProperties:

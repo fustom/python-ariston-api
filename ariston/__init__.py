@@ -17,6 +17,7 @@ from .const import (
     MedDeviceSettings,
     VelisDeviceProperties,
     EvoDeviceProperties,
+    NuosSplitProperties,
     DeviceProperties,
     DeviceFeatures,
     ThermostatProperties,
@@ -25,6 +26,8 @@ from .evo_device import AristonEvoDevice
 from .galevo_device import AristonGalevoDevice
 from .lydos_hybrid_device import AristonLydosHybridDevice
 from .velis_device import AristonVelisDevice
+from .nuos_split_device import AristonNuosSplitDevice
+from .evo_lydos_device import AristonEvoLydosDevice
 from .device import AristonDevice
 
 _LOGGER = logging.getLogger(__name__)
@@ -100,6 +103,11 @@ def _get_device(
             )
         if whe_type == WheType.Evo:
             return AristonEvoDevice(
+                api,
+                device,
+            )
+        if whe_type == WheType.NuosSplit:
+            return AristonNuosSplitDevice(
                 api,
                 device,
             )

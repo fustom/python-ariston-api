@@ -11,6 +11,7 @@ from .const import (
     DeviceFeatures,
     VelisDeviceAttribute,
     VelisDeviceProperties,
+    WaterHeaterMode,
     WheType,
 )
 from .device import AristonDevice
@@ -28,6 +29,112 @@ class AristonVelisDevice(AristonDevice, ABC):
     ) -> None:
         super().__init__(api, attributes)
         self.plant_settings: dict[str, Any] = dict()
+
+    @property
+    @abstractmethod
+    def plant_data(self) -> str:
+        """Final string to get plant data"""
+
+    @property
+    @abstractmethod
+    def anti_legionella_on_off(self) -> str:
+        """Final string to get anti-legionella-on-off"""
+
+    @property
+    @abstractmethod
+    def water_heater_mode(self) -> type[WaterHeaterMode]:
+        """Return the water heater mode class"""
+
+    @property
+    @abstractmethod
+    def max_setpoint_temp(self) -> str:
+        """Final string to get max setpoint temperature"""
+
+    def update_state(self) -> None:
+        """Update the device states from the cloud"""
+        self.data = self.api.get_velis_plant_data(self.plant_data, self.gw)
+
+    async def async_update_state(self) -> None:
+        """Async update the device states from the cloud"""
+        self.data = await self.api.async_get_velis_plant_data(self.plant_data, self.gw)
+
+    def update_settings(self) -> None:
+        """Get device settings wrapper"""
+        self.plant_settings = self.api.get_velis_plant_settings(
+            self.plant_data, self.gw
+        )
+
+    async def async_update_settings(self) -> None:
+        """Get device settings wrapper"""
+        self.plant_settings = await self.api.async_get_velis_plant_settings(
+            self.plant_data, self.gw
+        )
+
+    def set_power(self, power: bool):
+        """Set water heater power"""
+        self.api.set_velis_power(self.gw, self.plant_data, power)
+        self.data[VelisDeviceProperties.ON] = power
+
+    async def async_set_power(self, power: bool) -> None:
+        """Async set water heater power"""
+        await self.api.async_set_velis_power(self.gw, self.plant_data, power)
+        self.data[VelisDeviceProperties.ON] = power
+
+    def get_water_anti_leg_value(self) -> Optional[bool]:
+        """Get water heater anti-legionella value"""
+        return self.plant_settings.get(self.anti_legionella_on_off, None)
+
+    def set_antilegionella(self, anti_leg: bool):
+        """Set water heater anti-legionella"""
+        self.api.set_velis_plant_setting(
+            self.gw,
+            self.plant_data,
+            self.anti_legionella_on_off,
+            1.0 if anti_leg else 0.0,
+            1.0 if self.plant_settings[self.anti_legionella_on_off] else 0.0,
+        )
+        self.plant_settings[self.anti_legionella_on_off] = anti_leg
+
+    async def async_set_antilegionella(self, anti_leg: bool):
+        """Async set water heater anti-legionella"""
+        await self.api.async_set_velis_plant_setting(
+            self.gw,
+            self.plant_data,
+            self.anti_legionella_on_off,
+            1.0 if anti_leg else 0.0,
+            1.0 if self.plant_settings[self.anti_legionella_on_off] else 0.0,
+        )
+        self.plant_settings[self.anti_legionella_on_off] = anti_leg
+
+    def get_water_heater_mode_operation_texts(self) -> list[str]:
+        """Get water heater operation mode texts"""
+        return [flag.name for flag in self.water_heater_mode]
+
+    def get_water_heater_mode_options(self) -> list[int]:
+        """Get water heater operation options"""
+        return [flag.value for flag in self.water_heater_mode]
+
+    def set_max_setpoint_temp(self, max_setpoint_temp: float):
+        """Set water heater maximum setpoint temperature"""
+        self.api.set_velis_plant_setting(
+            self.gw,
+            self.plant_data,
+            self.max_setpoint_temp,
+            max_setpoint_temp,
+            self.plant_settings[self.max_setpoint_temp],
+        )
+        self.plant_settings[self.max_setpoint_temp] = max_setpoint_temp
+
+    async def async_set_max_setpoint_temp(self, max_setpoint_temp: float):
+        """Async set water heater maximum setpoint temperature"""
+        await self.api.async_set_velis_plant_setting(
+            self.gw,
+            self.plant_data,
+            self.max_setpoint_temp,
+            max_setpoint_temp,
+            self.plant_settings[self.max_setpoint_temp],
+        )
+        self.plant_settings[self.max_setpoint_temp] = max_setpoint_temp
 
     def get_whe_type(self) -> WheType:
         """Get device whe type wrapper"""
@@ -50,21 +157,6 @@ class AristonVelisDevice(AristonDevice, ABC):
         await self.async_update_settings()
 
     @abstractmethod
-    def update_settings(self) -> None:
-        """Get device settings wrapper"""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def async_update_settings(self) -> None:
-        """Get device settings wrapper"""
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_water_anti_leg_value(self) -> Optional[bool]:
-        """Get water heater anti-legionella value"""
-        raise NotImplementedError
-
-    @abstractmethod
     def get_water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
         """Get water heater maximum setpoint temperature minimum"""
         raise NotImplementedError
@@ -74,14 +166,9 @@ class AristonVelisDevice(AristonDevice, ABC):
         """Get water heater maximum setpoint maximum temperature"""
         raise NotImplementedError
 
-    @abstractmethod
     def get_water_heater_maximum_setpoint_temperature(self) -> Optional[float]:
         """Get water heater maximum setpoint temperature value"""
-        raise NotImplementedError
-
-    def get_water_heater_current_temperature(self) -> Optional[float]:
-        """Get water heater current temperature"""
-        return self.data.get(VelisDeviceProperties.TEMP, None)
+        return self.plant_settings.get(self.max_setpoint_temp, None)
 
     def get_water_heater_minimum_temperature(self) -> float:
         """Get water heater minimum temperature"""
@@ -90,10 +177,6 @@ class AristonVelisDevice(AristonDevice, ABC):
     def get_water_heater_maximum_temperature(self) -> Optional[float]:
         """Get water heater maximum temperature"""
         return self.get_water_heater_maximum_setpoint_temperature()
-
-    def get_water_heater_target_temperature(self) -> Optional[float]:
-        """Get water heater target temperature"""
-        return self.data.get(VelisDeviceProperties.REQ_TEMP, None)
 
     def get_water_heater_temperature_step(self) -> int:
         """Get water heater temperature step"""
@@ -111,49 +194,11 @@ class AristonVelisDevice(AristonDevice, ABC):
         """Get water heater mode value"""
         return self.data.get(VelisDeviceProperties.MODE, None)
 
-    def get_av_shw_value(self) -> Optional[int]:
-        """Get average showers value"""
-        return self.data.get(VelisDeviceProperties.AV_SHW, None)
-
     def get_water_heater_power_value(self) -> Optional[bool]:
         """Get water heater power value"""
         return self.data.get(VelisDeviceProperties.ON, None)
-
-    def get_is_heating(self) -> Optional[bool]:
-        """Get is the water heater heating"""
-        return self.data.get(VelisDeviceProperties.HEAT_REQ, None)
 
     @staticmethod
     def get_empty_unit() -> str:
         """Get empty unit"""
         return ""
-
-    @abstractmethod
-    def set_antilegionella(self, anti_leg: bool) -> None:
-        """Set water heater anti-legionella"""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def async_set_antilegionella(self, anti_leg: bool) -> None:
-        """Async set water heater anti-legionella"""
-        raise NotImplementedError
-
-    @abstractmethod
-    def set_water_heater_temperature(self, temperature: float) -> None:
-        """Set water heater temperature"""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def async_set_water_heater_temperature(self, temperature: float) -> None:
-        """Async set water heater temperature"""
-        raise NotImplementedError
-
-    @abstractmethod
-    def set_power(self, power: bool) -> None:
-        """Set water heater power"""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def async_set_power(self, power: bool) -> None:
-        """Async set water heater power"""
-        raise NotImplementedError

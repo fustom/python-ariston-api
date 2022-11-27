@@ -42,6 +42,11 @@ class AristonGalevoDevice(AristonDevice):
         self.consumptions_settings: dict[str, Any] = dict()
         self.energy_account: dict[str, Any] = dict()
 
+    @property
+    def consumption_type(self) -> str:
+        """String to get consumption type"""
+        return f"Ch{'%2CDhw' if self.custom_features.get(CustomDeviceFeatures.HAS_DHW) else ''}"
+
     def _update_state(self) -> None:
         """Set custom features"""
         if self.custom_features.get(CustomDeviceFeatures.HAS_OUTSIDE_TEMP) is None:
@@ -456,20 +461,6 @@ class AristonGalevoDevice(AristonDevice):
                 and item.get(PropertyType.ZONE) == zone_number
             ),
             None,
-        )
-
-    def _get_consumptions_sequences(self) -> None:
-        """Get consumption sequence"""
-        self.consumptions_sequences = self.api.get_consumptions_sequences(
-            self.gw,
-            f"Ch{'%2CDhw' if self.custom_features.get(CustomDeviceFeatures.HAS_DHW) else ''}",
-        )
-
-    async def _async_get_consumptions_sequences(self) -> None:
-        """Async get consumption sequence"""
-        self.consumptions_sequences = await self.api.async_get_consumptions_sequences(
-            self.gw,
-            f"Ch{'%2CDhw' if self.custom_features.get(CustomDeviceFeatures.HAS_DHW) else ''}",
         )
 
     def get_elect_cost(self) -> Optional[float]:

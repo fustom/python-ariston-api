@@ -41,6 +41,25 @@ class AristonDevice(ABC):
         )
         self.gw: str = self.attributes.get(DeviceAttribute.GW, "")
 
+    @property
+    @abstractmethod
+    def consumption_type(self) -> str:
+        """String to get consumption type"""
+
+    def _get_consumptions_sequences(self) -> None:
+        """Get consumption sequence"""
+        self.consumptions_sequences = self.api.get_consumptions_sequences(
+            self.gw,
+            self.consumption_type,
+        )
+
+    async def _async_get_consumptions_sequences(self) -> None:
+        """Async get consumption sequence"""
+        self.consumptions_sequences = await self.api.async_get_consumptions_sequences(
+            self.gw,
+            self.consumption_type,
+        )
+
     def get_system_type(self) -> SystemType:
         """Get device system type wrapper"""
         return SystemType(self.attributes.get(DeviceAttribute.SYS, SystemType.UNKNOWN))
@@ -157,6 +176,16 @@ class AristonDevice(ABC):
         """Abstract method for get water heater temperature step"""
         raise NotImplementedError
 
+    @abstractmethod
+    def set_water_heater_operation_mode(self, operation_mode: str) -> None:
+        """Abstract method for set water heater operation mode"""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def async_set_water_heater_operation_mode(self, operation_mode: str) -> None:
+        """Abstract method for async set water heater operation mode"""
+        raise NotImplementedError
+
     def get_consumption_sequence_last_changed_utc(self) -> dt.datetime:
         """Get consumption sequence last changed in utc"""
         return self.consumption_sequence_last_changed_utc
@@ -228,16 +257,6 @@ class AristonDevice(ABC):
                 return sequence["v"][-1]
 
         return None
-
-    @abstractmethod
-    def _get_consumptions_sequences(self) -> None:
-        """Get consumption sequence"""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def _async_get_consumptions_sequences(self) -> None:
-        """Async get consumption sequence"""
-        raise NotImplementedError
 
     def _update_energy(self, old_consumptions_sequences: list[dict[str, Any]]) -> None:
         """Update the device energy settings"""

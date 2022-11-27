@@ -7,6 +7,7 @@ The following devices are currently supported:
 - Ariston Velis Evo
 - Ariston Lydos Hybrid
 - Ariston Genus One
+- Ariston Nuos Split
 
 ## Installation
 Use pip3 to install the latest version of this module.
