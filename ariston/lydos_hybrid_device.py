@@ -5,10 +5,10 @@ import logging
 from typing import Optional
 
 from .const import (
-    ARISTON_SE_PLANT_DATA,
     ConsumptionTimeInterval,
     ConsumptionType,
     LydosPlantMode,
+    PlantData,
     SeDeviceSettings,
     LydosDeviceProperties,
 )
@@ -21,9 +21,9 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
     """Class representing a physical device, it's state and properties."""
 
     @property
-    def plant_data(self) -> str:
+    def plant_data(self) -> PlantData:
         """Final string to get plant data"""
-        return ARISTON_SE_PLANT_DATA
+        return PlantData.Se
 
     @property
     def anti_legionella_on_off(self) -> str:

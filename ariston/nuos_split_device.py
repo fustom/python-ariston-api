@@ -6,9 +6,9 @@ from typing import Optional
 
 from .velis_device import AristonVelisDevice
 from .const import (
-    ARISTON_SLP_PLANT_DATA,
     NuosSplitOperativeMode,
     NuosSplitProperties,
+    PlantData,
     SlpDeviceSettings,
 )
 
@@ -19,9 +19,9 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     """Class representing a physical device, it's state and properties."""
 
     @property
-    def plant_data(self) -> str:
+    def plant_data(self) -> PlantData:
         """Final string to get plant data"""
-        return ARISTON_SLP_PLANT_DATA
+        return PlantData.Slp
 
     @property
     def anti_legionella_on_off(self) -> str:
@@ -175,8 +175,8 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     def set_min_setpoint_temp(self, min_setpoint_temp: float):
         """Set water heater minimum setpoint temperature"""
         self.api.set_velis_plant_setting(
-            self.gw,
             self.plant_data,
+            self.gw,
             SlpDeviceSettings.SLP_MIN_SETPOINT_TEMPERATURE,
             min_setpoint_temp,
             self.plant_settings[SlpDeviceSettings.SLP_MIN_SETPOINT_TEMPERATURE],
@@ -188,8 +188,8 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     async def async_set_min_setpoint_temp(self, min_setpoint_temp: float):
         """Async set water heater minimum setpoint temperature"""
         await self.api.async_set_velis_plant_setting(
-            self.gw,
             self.plant_data,
+            self.gw,
             SlpDeviceSettings.SLP_MIN_SETPOINT_TEMPERATURE,
             min_setpoint_temp,
             self.plant_settings[SlpDeviceSettings.SLP_MIN_SETPOINT_TEMPERATURE],
@@ -201,8 +201,8 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     def set_preheating(self, preheating: bool):
         """Set water heater preheating"""
         self.api.set_velis_plant_setting(
-            self.gw,
             self.plant_data,
+            self.gw,
             SlpDeviceSettings.SLP_PRE_HEATING_ON_OFF,
             preheating,
             self.plant_settings[SlpDeviceSettings.SLP_PRE_HEATING_ON_OFF],
@@ -212,8 +212,8 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     async def async_set_preheating(self, preheating: bool):
         """Async set water heater preheating"""
         await self.api.async_set_velis_plant_setting(
-            self.gw,
             self.plant_data,
+            self.gw,
             SlpDeviceSettings.SLP_PRE_HEATING_ON_OFF,
             preheating,
             self.plant_settings[SlpDeviceSettings.SLP_PRE_HEATING_ON_OFF],
@@ -223,8 +223,8 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     def set_heating_rate(self, heating_rate: float):
         """Set water heater heating rate"""
         self.api.set_velis_plant_setting(
-            self.gw,
             self.plant_data,
+            self.gw,
             SlpDeviceSettings.SLP_HEATING_RATE,
             heating_rate,
             self.plant_settings[SlpDeviceSettings.SLP_HEATING_RATE],
@@ -234,8 +234,8 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     async def async_set_heating_rate(self, heating_rate: float):
         """Async set water heater heating rate"""
         await self.api.async_set_velis_plant_setting(
-            self.gw,
             self.plant_data,
+            self.gw,
             SlpDeviceSettings.SLP_HEATING_RATE,
             heating_rate,
             self.plant_settings[SlpDeviceSettings.SLP_HEATING_RATE],

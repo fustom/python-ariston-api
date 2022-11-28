@@ -10,11 +10,17 @@ ARISTON_LITE: Final[str] = "lite"
 ARISTON_DATA_ITEMS: Final[str] = "dataItems"
 ARISTON_ZONES: Final[str] = "zones"
 ARISTON_PLANT_DATA: Final[str] = "plantData"
-ARISTON_MED_PLANT_DATA: Final[str] = "medPlantData"
-ARISTON_SE_PLANT_DATA: Final[str] = "sePlantData"
-ARISTON_SLP_PLANT_DATA: Final[str] = "slpPlantData"
 ARISTON_REPORTS: Final[str] = "reports"
 ARISTON_TIME_PROGS: Final[str] = "timeProgs"
+
+
+@unique
+class PlantData(str, Enum):
+    """Plant data enum"""
+
+    Med = "medPlantData"
+    Se = "sePlantData"
+    Slp = "slpPlantData"
 
 
 @unique

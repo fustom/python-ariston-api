@@ -9,6 +9,7 @@ from .ariston_api import AristonAPI
 from .const import (
     CustomDeviceFeatures,
     DeviceFeatures,
+    PlantData,
     VelisDeviceProperties,
     WaterHeaterMode,
 )
@@ -30,7 +31,7 @@ class AristonVelisDevice(AristonDevice, ABC):
 
     @property
     @abstractmethod
-    def plant_data(self) -> str:
+    def plant_data(self) -> PlantData:
         """Final string to get plant data"""
 
     @property
@@ -70,12 +71,12 @@ class AristonVelisDevice(AristonDevice, ABC):
 
     def set_power(self, power: bool):
         """Set water heater power"""
-        self.api.set_velis_power(self.gw, self.plant_data, power)
+        self.api.set_velis_power(self.plant_data, self.gw, power)
         self.data[VelisDeviceProperties.ON] = power
 
     async def async_set_power(self, power: bool) -> None:
         """Async set water heater power"""
-        await self.api.async_set_velis_power(self.gw, self.plant_data, power)
+        await self.api.async_set_velis_power(self.plant_data, self.gw, power)
         self.data[VelisDeviceProperties.ON] = power
 
     def get_water_anti_leg_value(self) -> Optional[bool]:
@@ -85,8 +86,8 @@ class AristonVelisDevice(AristonDevice, ABC):
     def set_antilegionella(self, anti_leg: bool):
         """Set water heater anti-legionella"""
         self.api.set_velis_plant_setting(
-            self.gw,
             self.plant_data,
+            self.gw,
             self.anti_legionella_on_off,
             1.0 if anti_leg else 0.0,
             1.0 if self.plant_settings[self.anti_legionella_on_off] else 0.0,
@@ -96,8 +97,8 @@ class AristonVelisDevice(AristonDevice, ABC):
     async def async_set_antilegionella(self, anti_leg: bool):
         """Async set water heater anti-legionella"""
         await self.api.async_set_velis_plant_setting(
-            self.gw,
             self.plant_data,
+            self.gw,
             self.anti_legionella_on_off,
             1.0 if anti_leg else 0.0,
             1.0 if self.plant_settings[self.anti_legionella_on_off] else 0.0,
@@ -115,8 +116,8 @@ class AristonVelisDevice(AristonDevice, ABC):
     def set_max_setpoint_temp(self, max_setpoint_temp: float):
         """Set water heater maximum setpoint temperature"""
         self.api.set_velis_plant_setting(
-            self.gw,
             self.plant_data,
+            self.gw,
             self.max_setpoint_temp,
             max_setpoint_temp,
             self.plant_settings[self.max_setpoint_temp],
@@ -126,8 +127,8 @@ class AristonVelisDevice(AristonDevice, ABC):
     async def async_set_max_setpoint_temp(self, max_setpoint_temp: float):
         """Async set water heater maximum setpoint temperature"""
         await self.api.async_set_velis_plant_setting(
-            self.gw,
             self.plant_data,
+            self.gw,
             self.max_setpoint_temp,
             max_setpoint_temp,
             self.plant_settings[self.max_setpoint_temp],

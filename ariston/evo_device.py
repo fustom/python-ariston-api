@@ -3,13 +3,12 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
-from datetime import datetime
 
 from .const import (
-    ARISTON_MED_PLANT_DATA,
     EvoPlantMode,
     EvoDeviceProperties,
     MedDeviceSettings,
+    PlantData,
 )
 from .evo_lydos_device import AristonEvoLydosDevice
 
@@ -20,9 +19,9 @@ class AristonEvoDevice(AristonEvoLydosDevice):
     """Class representing a physical device, it's state and properties."""
 
     @property
-    def plant_data(self) -> str:
+    def plant_data(self) -> PlantData:
         """Final string to get plant data"""
-        return ARISTON_MED_PLANT_DATA
+        return PlantData.Med
 
     @property
     def anti_legionella_on_off(self) -> str:
