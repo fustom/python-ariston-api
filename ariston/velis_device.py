@@ -9,10 +9,8 @@ from .ariston_api import AristonAPI
 from .const import (
     CustomDeviceFeatures,
     DeviceFeatures,
-    VelisDeviceAttribute,
     VelisDeviceProperties,
     WaterHeaterMode,
-    WheType,
 )
 from .device import AristonDevice
 
@@ -135,12 +133,6 @@ class AristonVelisDevice(AristonDevice, ABC):
             self.plant_settings[self.max_setpoint_temp],
         )
         self.plant_settings[self.max_setpoint_temp] = max_setpoint_temp
-
-    def get_whe_type(self) -> WheType:
-        """Get device whe type wrapper"""
-        return WheType(
-            self.attributes.get(VelisDeviceAttribute.WHE_TYPE, WheType.Unknown)
-        )
 
     def get_features(self) -> None:
         """Get device features wrapper"""

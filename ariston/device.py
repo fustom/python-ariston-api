@@ -64,6 +64,12 @@ class AristonDevice(ABC):
         """Get device system type wrapper"""
         return SystemType(self.attributes.get(DeviceAttribute.SYS, SystemType.UNKNOWN))
 
+    def get_whe_type(self) -> WheType:
+        """Get device whe type wrapper"""
+        return WheType(
+            self.attributes.get(VelisDeviceAttribute.WHE_TYPE, WheType.Unknown)
+        )
+
     def get_gateway(self) -> str:
         """Get device gateway wrapper"""
         return self.gw
@@ -307,14 +313,14 @@ class AristonDevice(ABC):
     def are_device_features_available(
         self,
         device_features: Optional[list[DeviceFeatures]],
-        system_types: Optional[list[SystemType | WheType]],
+        system_types: Optional[list[SystemType]],
+        whe_types: Optional[list[WheType]],
     ) -> bool:
         """Checks features availability"""
-        if (
-            system_types is not None
-            and self.attributes.get(DeviceAttribute.SYS) not in system_types
-            and self.attributes.get(VelisDeviceAttribute.WHE_TYPE) not in system_types
-        ):
+        if system_types is not None and self.get_system_type() not in system_types:
+            return False
+
+        if whe_types is not None and self.get_whe_type() not in whe_types:
             return False
 
         if device_features is not None:
