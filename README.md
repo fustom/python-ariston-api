@@ -36,13 +36,13 @@ Get your device
 ```python3
 device = ariston.hello("username", "password", "gateway", is_metric, "location")
 ```
-[Go use your device section](https://github.com/fustom/python-ariston-api#use-your-device)
+[Go use your device section](#use-your-device)
 ### Asyncronous
 ```python3
 raw_devices = await ariston.async_discover("username", "password")
 device = await ariston.async_hello("username", "password", "gateway", is_metric, "location")
 ```
-[Go use your device section](https://github.com/fustom/python-ariston-api#use-your-device)
+[Go use your device section](#use-your-device)
 ## The ariston class way (recommended for integrate the module)
 First, open Python 3 and import Ariston class from this module.
 ```
