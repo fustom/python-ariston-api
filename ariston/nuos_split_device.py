@@ -48,7 +48,7 @@ class AristonNuosSplitDevice(AristonVelisDevice):
 
     def get_water_heater_target_temperature(self) -> Optional[float]:
         """Get water heater target temperature"""
-        return self.data.get(NuosSplitProperties.PROC_REQ_TEMP, None)
+        return self.data.get(NuosSplitProperties.COMFORT_TEMP, None)
 
     def get_water_heater_reduced_temperature(self) -> Optional[float]:
         """Get water heater reduced temperature"""
