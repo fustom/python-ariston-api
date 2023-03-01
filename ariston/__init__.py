@@ -101,7 +101,7 @@ def _get_device(
                 api,
                 device,
             )
-        if whe_type == WheType.Evo:
+        if whe_type in [WheType.Evo, WheType.Evo2]:
             return AristonEvoDevice(
                 api,
                 device,

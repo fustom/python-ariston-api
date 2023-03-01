@@ -205,9 +205,10 @@ class WheType(IntFlag):
     """Whe type enum"""
 
     Unknown = -1
+    Evo = 1
     LydosHybrid = 2
     NuosSplit = 4
-    Evo = 6
+    Evo2 = 6
 
 
 @unique
