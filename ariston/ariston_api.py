@@ -676,11 +676,10 @@ class AristonAPI:
         headers = {"ar.authToken": self.__token}
 
         _LOGGER.debug(
-            "Request method %s, path: %s, params: %s, body: %s",
+            "Request method %s, path: %s, params: %s",
             method,
             path,
             params,
-            body,
         )
 
         async with aiohttp.ClientSession() as session:
