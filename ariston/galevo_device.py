@@ -548,32 +548,32 @@ class AristonGalevoDevice(AristonDevice):
         )
 
     def get_gas_consumption_for_heating_last_month(self) -> Optional[int]:
-        """Get gas consumption for heating last month"""
+        """Get gas consumption for heatig last month"""
         energy_account_last_month = self.energy_account.get("LastMonth", None)
-        if energy_account_last_month is None:
+        if not energy_account_last_month:
             return None
-        return energy_account_last_month[0]["gas"]
+        return energy_account_last_month[0].get("gas", None)
 
     def get_electricity_consumption_for_heating_last_month(self) -> Optional[int]:
         """Get electricity consumption for heating last month"""
         energy_account_last_month = self.energy_account.get("LastMonth", None)
-        if energy_account_last_month is None:
+        if not energy_account_last_month:
             return None
-        return energy_account_last_month[0]["elect"]
+        return energy_account_last_month[0].get("elect", None)
 
     def get_gas_consumption_for_water_last_month(self) -> Optional[int]:
         """Get gas consumption for water last month"""
         energy_account_last_month = self.energy_account.get("LastMonth", None)
-        if energy_account_last_month is None:
+        if not energy_account_last_month or len(energy_account_last_month) < 2:
             return None
-        return energy_account_last_month[1]["gas"]
+        return energy_account_last_month[1].get("gas", None)
 
     def get_electricity_consumption_for_water_last_month(self) -> Optional[int]:
         """Get electricity consumption for water last month"""
         energy_account_last_month = self.energy_account.get("LastMonth", None)
-        if energy_account_last_month is None:
+        if not energy_account_last_month or len(energy_account_last_month) < 2:
             return None
-        return energy_account_last_month[1]["elect"]
+        return energy_account_last_month[1].get("elect", None)
 
     def set_elect_cost(self, value: float):
         """Set electric cost"""
