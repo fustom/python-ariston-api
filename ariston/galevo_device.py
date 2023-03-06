@@ -474,7 +474,7 @@ class AristonGalevoDevice(AristonDevice):
     def get_gas_type(self) -> Optional[str]:
         """Get gas type"""
         gas_type = self.consumptions_settings.get(ConsumptionProperties.GAS_TYPE)
-        if gas_type in dir(GasType):
+        if gas_type in list(GasType):
             return GasType(gas_type).name
         return None
 
@@ -498,7 +498,7 @@ class AristonGalevoDevice(AristonDevice):
     def get_currency(self) -> Optional[str]:
         """Get gas type"""
         currency = self.consumptions_settings.get(ConsumptionProperties.CURRENCY)
-        if currency in dir(Currency):
+        if currency in list(Currency):
             return Currency(
                 self.consumptions_settings.get(ConsumptionProperties.CURRENCY)
             ).name
@@ -523,9 +523,12 @@ class AristonGalevoDevice(AristonDevice):
 
     def get_gas_energy_unit(self) -> Optional[str]:
         """Get gas energy unit"""
-        return GasEnergyUnit(
-            self.consumptions_settings.get(ConsumptionProperties.GAS_ENERGY_UNIT)
-        ).name
+        gas_energy_unit = self.consumptions_settings.get(ConsumptionProperties.GAS_ENERGY_UNIT)
+        if gas_energy_unit in list(GasEnergyUnit):
+            return GasEnergyUnit(
+                self.consumptions_settings.get(ConsumptionProperties.GAS_ENERGY_UNIT)
+            ).name
+        return None
 
     @staticmethod
     def get_gas_energy_units() -> list[Optional[str]]:
