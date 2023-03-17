@@ -156,6 +156,15 @@ class WaterHeaterMode(Enum):
 
 
 @unique
+class LuxPlantMode(WaterHeaterMode):
+    """Lux plant mode enum"""
+
+    MANUAL = 1
+    PROGRAM = 5
+    BOOST = 9
+
+
+@unique
 class EvoPlantMode(WaterHeaterMode):
     """Evo plant mode enum"""
 
@@ -209,6 +218,7 @@ class WheType(IntFlag):
     LydosHybrid = 2
     NuosSplit = 4
     Evo2 = 6
+    Lux = 8
 
 
 @unique
