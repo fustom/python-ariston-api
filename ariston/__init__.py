@@ -22,6 +22,7 @@ from .const import (
     DeviceFeatures,
     ThermostatProperties,
 )
+from .lux_device import AristonLuxDevice
 from .evo_device import AristonEvoDevice
 from .galevo_device import AristonGalevoDevice
 from .lydos_hybrid_device import AristonLydosHybridDevice
@@ -108,6 +109,11 @@ def _get_device(
             )
         if whe_type == WheType.NuosSplit:
             return AristonNuosSplitDevice(
+                api,
+                device,
+            )
+        if whe_type == WheType.Lux:
+            return AristonLuxDevice(
                 api,
                 device,
             )
