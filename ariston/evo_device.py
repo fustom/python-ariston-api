@@ -49,6 +49,14 @@ class AristonEvoDevice(AristonEvoLydosDevice):
     def get_rm_tm_value(self) -> Optional[str]:
         """Get remaining time value"""
         return self.data.get(EvoDeviceProperties.RM_TM, None)
+    
+    def get_rm_tm_in_minutes(self) -> int:
+        """Get remaining time value in minutes"""
+        rm_tm = self.get_rm_tm_value()
+        if rm_tm is None:
+            return -1
+        time = datetime.strptime(rm_tm, "%H:%M:%S")
+        return time.hour * 60 + time.minute
 
     def get_water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
         """Get water heater maximum setpoint temperature minimum"""
