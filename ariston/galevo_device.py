@@ -330,10 +330,14 @@ class AristonGalevoDevice(AristonDevice):
 
     def get_plant_mode_text(self) -> str:
         """Get plant mode on option texts"""
-        index = self.get_plant_mode_options().index(self.get_plant_mode())
-        return self._get_item_by_id(
-            DeviceProperties.PLANT_MODE, PropertyType.OPT_TEXTS
-        )[index]
+        current_plant_mode = self.get_plant_mode().value
+        plant_mode_options = self.get_plant_mode_options()
+        if current_plant_mode in plant_mode_options:
+            index = plant_mode_options.index(current_plant_mode)
+            return self._get_item_by_id(
+                DeviceProperties.PLANT_MODE, PropertyType.OPT_TEXTS
+            )[index]
+        return PlantMode.UNDEFINED.name
 
     def get_measured_temp_unit(self, zone: int) -> str:
         """Get zone measured temp unit"""
