@@ -283,6 +283,10 @@ class AristonGalevoDevice(AristonDevice):
     def get_is_flame_on_value(self) -> bool:
         """Get is flame on value"""
         return self._get_item_by_id(DeviceProperties.IS_FLAME_ON, PropertyType.VALUE)
+        
+    def get_is_heating_pump_on_value(self) -> bool:                              
+        """Get is heating pump on value"""                                           
+        return self._get_item_by_id(DeviceProperties.IS_HEATING_PUMP_ON, PropertyType.VALUE)
 
     def get_holiday_mode_value(self) -> bool:
         """Get holiday mode on value"""
