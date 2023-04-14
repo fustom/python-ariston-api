@@ -119,7 +119,7 @@ class AristonGalevoDevice(AristonDevice):
         return [zone.get(ZoneAttribute.NUM, 0) for zone in self.get_zones()]
 
     def get_water_heater_current_temperature(self) -> Optional[float]:
-        """Get water heater current temperature""
+        """Get water heater current temperature"""
         if self.custom_features.get(DeviceProperties.DHW_STORAGE_TEMPERATURE):
             return self._get_item_by_id(
                 DeviceProperties.DHW_STORAGE_TEMPERATURE, PropertyType.VALUE
