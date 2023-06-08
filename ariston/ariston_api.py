@@ -177,7 +177,7 @@ class AristonAPI:
 
     def get_velis_plant_data(self, plant_data: PlantData, gw_id: str) -> dict[str, Any]:
         """Get Velis properties"""
-        data = self._get(f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data}/{gw_id}")
+        data = self._get(f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}")
         if data is not None:
             return data
         return dict()
@@ -187,7 +187,7 @@ class AristonAPI:
     ) -> dict[str, Any]:
         """Get Velis settings"""
         settings = self._get(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data}/{gw_id}/plantSettings"
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/plantSettings"
         )
         if settings is not None:
             return settings
@@ -293,7 +293,7 @@ class AristonAPI:
     def set_velis_power(self, plant_data: PlantData, gw_id: str, power: bool) -> None:
         """Set Velis power"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data}/{gw_id}/switch",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/switch",
             power,
         )
 
@@ -307,7 +307,7 @@ class AristonAPI:
     ) -> None:
         """Set Velis plant setting"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data}/{gw_id}/plantSettings",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/plantSettings",
             {setting: {"new": value, "old": old_value}},
         )
 
@@ -500,7 +500,7 @@ class AristonAPI:
     ) -> dict[str, Any]:
         """Async get Velis properties"""
         med_plant_data = await self._async_get(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data}/{gw_id}"
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}"
         )
         if med_plant_data is not None:
             return med_plant_data
@@ -511,7 +511,7 @@ class AristonAPI:
     ) -> dict[str, Any]:
         """Async get Velis settings"""
         med_plant_settings = await self._async_get(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data}/{gw_id}/plantSettings"
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/plantSettings"
         )
         if med_plant_settings is not None:
             return med_plant_settings
@@ -623,7 +623,7 @@ class AristonAPI:
     ) -> None:
         """Async set Velis power"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data}/{gw_id}/switch",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/switch",
             power,
         )
 
@@ -637,7 +637,7 @@ class AristonAPI:
     ) -> None:
         """Async set Velis Evo plant setting"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data}/{gw_id}/plantSettings",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}/plantSettings",
             {setting: {"new": value, "old": old_value}},
         )
 
