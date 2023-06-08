@@ -14,5 +14,5 @@ dependencies = [
 ]
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
-version = "0.13.2"
+version = "0.13.3"
 dynamic = ['description']
