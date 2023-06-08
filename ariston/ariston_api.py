@@ -222,7 +222,7 @@ class AristonAPI:
     def set_evo_mode(self, gw_id: str, value: EvoPlantMode) -> None:
         """Set Velis Evo mode"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med}/{gw_id}/mode",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/mode",
             {
                 "new": value.value,
             },
@@ -231,7 +231,7 @@ class AristonAPI:
     def set_lydos_mode(self, gw_id: str, value: LydosPlantMode) -> None:
         """Set Velis Lydos mode"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Se}/{gw_id}/mode",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Se.value}/{gw_id}/mode",
             {
                 "new": value.value,
             },
@@ -240,7 +240,7 @@ class AristonAPI:
     def set_nuos_mode(self, gw_id: str, value: NuosSplitOperativeMode) -> None:
         """Set Velis Nuos mode"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp}/{gw_id}/operativeMode",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/operativeMode",
             {
                 "new": value.value,
             },
@@ -249,7 +249,7 @@ class AristonAPI:
     def set_evo_temperature(self, gw_id: str, value: float) -> None:
         """Set Velis Evo temperature"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med}/{gw_id}/temperature",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/temperature",
             {
                 "new": value,
             },
@@ -258,7 +258,7 @@ class AristonAPI:
     def set_lydos_temperature(self, gw_id: str, value: float) -> None:
         """Set Velis Lydos temperature"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Se}/{gw_id}/temperature",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Se.value}/{gw_id}/temperature",
             {
                 "new": value,
             },
@@ -267,7 +267,7 @@ class AristonAPI:
     def set_nuos_temperature(self, gw_id: str, comfort: float, reduced: float) -> None:
         """Set Nuos temperature"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp}/{gw_id}/temperatures",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/temperatures",
             {
                 "new": {
                     "comfort": comfort,
@@ -279,14 +279,14 @@ class AristonAPI:
     def set_nous_boost(self, gw_id: str, boost: bool) -> None:
         """ "Set Nous boost"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp}/{gw_id}/boost",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/boost",
             boost,
         )
 
     def set_evo_eco_mode(self, gw_id: str, eco_mode: bool) -> None:
         """Set Velis Evo eco mode"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med}/{gw_id}/switchEco",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/switchEco",
             eco_mode,
         )
 
@@ -546,7 +546,7 @@ class AristonAPI:
     async def async_set_evo_mode(self, gw_id: str, value: EvoPlantMode) -> None:
         """Async set Velis Evo mode"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med}/{gw_id}/mode",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/mode",
             {
                 "new": value.value,
             },
@@ -555,7 +555,7 @@ class AristonAPI:
     async def async_set_lydos_mode(self, gw_id: str, value: LydosPlantMode) -> None:
         """Async set Velis Lydos mode"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Se}/{gw_id}/mode",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Se.value}/{gw_id}/mode",
             {
                 "new": value.value,
             },
@@ -566,7 +566,7 @@ class AristonAPI:
     ) -> None:
         """Async set Velis Nuos mode"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp}/{gw_id}/operativeMode",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/operativeMode",
             {
                 "new": value.value,
             },
@@ -575,7 +575,7 @@ class AristonAPI:
     async def async_set_evo_temperature(self, gw_id: str, value: float) -> None:
         """Async set Velis Evo temperature"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med}/{gw_id}/temperature",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/temperature",
             {
                 "new": value,
             },
@@ -584,7 +584,7 @@ class AristonAPI:
     async def async_set_lydos_temperature(self, gw_id: str, value: float) -> None:
         """Async set Velis Lydos temperature"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Se}/{gw_id}/temperature",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Se.value}/{gw_id}/temperature",
             {
                 "new": value,
             },
@@ -595,7 +595,7 @@ class AristonAPI:
     ) -> None:
         """Async set Velis Lydos temperature"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp}/{gw_id}/temperatures",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/temperatures",
             {
                 "new": {
                     "comfort": comfort,
@@ -607,14 +607,14 @@ class AristonAPI:
     async def async_set_nous_boost(self, gw_id: str, boost: bool) -> None:
         """ "Set Nous boost"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp}/{gw_id}/boost",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/boost",
             boost,
         )
 
     async def async_set_evo_eco_mode(self, gw_id: str, eco_mode: bool) -> None:
         """Async set Velis Evo eco mode"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med}/{gw_id}/switchEco",
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/switchEco",
             eco_mode,
         )
 
