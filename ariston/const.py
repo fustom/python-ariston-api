@@ -1,4 +1,4 @@
-from enum import Enum, IntFlag, unique
+from enum import Enum, unique
 from typing import Final
 
 ARISTON_API_URL: Final[str] = "https://www.ariston-net.remotethermo.com/api/v2/"
@@ -24,7 +24,7 @@ class PlantData(str, Enum):
 
 
 @unique
-class PlantMode(IntFlag):
+class PlantMode(Enum):
     """Plant mode enum"""
 
     UNDEFINED = -1
@@ -38,7 +38,7 @@ class PlantMode(IntFlag):
 
 
 @unique
-class ZoneMode(IntFlag):
+class ZoneMode(Enum):
     """Zone mode enum"""
 
     UNDEFINED = -1
@@ -49,7 +49,7 @@ class ZoneMode(IntFlag):
 
 
 @unique
-class DhwMode(IntFlag):
+class DhwMode(Enum):
     """Dhw mode enum"""
 
     DISABLED = 0
@@ -61,7 +61,7 @@ class DhwMode(IntFlag):
 
 
 @unique
-class Weather(IntFlag):
+class Weather(Enum):
     """Weather enum"""
 
     UNAVAILABLE = 0
@@ -78,7 +78,7 @@ class Weather(IntFlag):
 
 
 @unique
-class GasEnergyUnit(IntFlag):
+class GasEnergyUnit(Enum):
     """Gas energy unit enum"""
 
     KWH = 0
@@ -90,7 +90,7 @@ class GasEnergyUnit(IntFlag):
 
 
 @unique
-class GasType(IntFlag):
+class GasType(Enum):
     """Gas type enu,"""
 
     NATURAL_GAS = 0
@@ -101,7 +101,7 @@ class GasType(IntFlag):
 
 
 @unique
-class Currency(IntFlag):
+class Currency(Enum):
     """Currency enum"""
 
     ARS = 1
@@ -127,7 +127,7 @@ class Currency(IntFlag):
 
 
 @unique
-class SystemType(IntFlag):
+class SystemType(Enum):
     """System type enum"""
 
     UNKNOWN = -1
@@ -139,7 +139,7 @@ class SystemType(IntFlag):
 
 
 @unique
-class Brands(IntFlag):
+class Brands(Enum):
     """Brands enum"""
 
     Ariston = 1
@@ -210,7 +210,7 @@ class LydosPlantMode(WaterHeaterMode):
 
 
 @unique
-class WheType(IntFlag):
+class WheType(Enum):
     """Whe type enum"""
 
     Unknown = -1
@@ -222,7 +222,7 @@ class WheType(IntFlag):
 
 
 @unique
-class ConsumptionType(IntFlag):
+class ConsumptionType(Enum):
     """Consumption type"""
 
     CENTRAL_HEATING_TOTAL_ENERGY = 1
@@ -236,7 +236,7 @@ class ConsumptionType(IntFlag):
 
 
 @unique
-class ConsumptionTimeInterval(IntFlag):
+class ConsumptionTimeInterval(Enum):
     """Consumption time interval"""
 
     # I am not sure. This is just a guess.
