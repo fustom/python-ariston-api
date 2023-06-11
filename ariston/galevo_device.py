@@ -494,13 +494,13 @@ class AristonGalevoDevice(AristonDevice):
     def set_gas_type(self, selected: str):
         """Set gas type"""
         self._set_consumptions_settings(
-            ConsumptionProperties.GAS_TYPE, GasType[selected]
+            ConsumptionProperties.GAS_TYPE, GasType[selected].value
         )
 
     async def async_set_gas_type(self, selected: str):
         """Async set gas type"""
         await self._async_set_consumptions_settings(
-            ConsumptionProperties.GAS_TYPE, GasType[selected]
+            ConsumptionProperties.GAS_TYPE, GasType[selected].value
         )
 
     def get_currency(self) -> Optional[str]:
@@ -520,13 +520,13 @@ class AristonGalevoDevice(AristonDevice):
     def set_currency(self, selected: str):
         """Set currency"""
         self._set_consumptions_settings(
-            ConsumptionProperties.CURRENCY, Currency[selected]
+            ConsumptionProperties.CURRENCY, Currency[selected].value
         )
 
     async def async_set_currency(self, selected: str):
         """Async set currency"""
         await self._async_set_consumptions_settings(
-            ConsumptionProperties.CURRENCY, Currency[selected]
+            ConsumptionProperties.CURRENCY, Currency[selected].value
         )
 
     def get_gas_energy_unit(self) -> Optional[str]:
@@ -546,13 +546,13 @@ class AristonGalevoDevice(AristonDevice):
     def set_gas_energy_unit(self, selected: str):
         """Set gas energy unit"""
         self._set_consumptions_settings(
-            ConsumptionProperties.GAS_ENERGY_UNIT, GasEnergyUnit[selected]
+            ConsumptionProperties.GAS_ENERGY_UNIT, GasEnergyUnit[selected].value
         )
 
     async def async_set_gas_energy_unit(self, selected: str):
         """Async set gas energy unit"""
         await self._async_set_consumptions_settings(
-            ConsumptionProperties.GAS_ENERGY_UNIT, GasEnergyUnit[selected]
+            ConsumptionProperties.GAS_ENERGY_UNIT, GasEnergyUnit[selected].value
         )
 
     def get_gas_consumption_for_heating_last_month(self) -> Optional[int]:
@@ -659,19 +659,19 @@ class AristonGalevoDevice(AristonDevice):
 
     def set_plant_mode(self, plant_mode: PlantMode):
         """Set plant mode"""
-        self.set_item_by_id(DeviceProperties.PLANT_MODE, plant_mode)
+        self.set_item_by_id(DeviceProperties.PLANT_MODE, plant_mode.value)
 
     async def async_set_plant_mode(self, plant_mode: PlantMode):
         """Async set plant mode"""
-        await self.async_set_item_by_id(DeviceProperties.PLANT_MODE, plant_mode)
+        await self.async_set_item_by_id(DeviceProperties.PLANT_MODE, plant_mode.value)
 
     def set_zone_mode(self, zone_mode: ZoneMode, zone: int):
         """Set zone mode"""
-        self.set_item_by_id(ThermostatProperties.ZONE_MODE, zone_mode, zone)
+        self.set_item_by_id(ThermostatProperties.ZONE_MODE, zone_mode.value, zone)
 
     async def async_set_zone_mode(self, zone_mode: ZoneMode, zone: int):
         """Async set zone mode"""
-        await self.async_set_item_by_id(ThermostatProperties.ZONE_MODE, zone_mode, zone)
+        await self.async_set_item_by_id(ThermostatProperties.ZONE_MODE, zone_mode.value, zone)
 
     def set_comfort_temp(self, temp: float, zone: int):
         """Set comfort temp"""

@@ -88,31 +88,31 @@ def _get_device(
         return None
 
     system_type = device.get(DeviceAttribute.SYS)
-    if system_type == SystemType.GALEVO:
+    if system_type == SystemType.GALEVO.value:
         return AristonGalevoDevice(
             api,
             device,
             is_metric,
             language_tag,
         )
-    if system_type == SystemType.VELIS:
+    if system_type == SystemType.VELIS.value:
         whe_type = device.get(VelisDeviceAttribute.WHE_TYPE)
-        if whe_type == WheType.LydosHybrid:
+        if whe_type == WheType.LydosHybrid.value:
             return AristonLydosHybridDevice(
                 api,
                 device,
             )
-        if whe_type in [WheType.Evo, WheType.Evo2]:
+        if whe_type in [WheType.Evo.value, WheType.Evo2.value]:
             return AristonEvoDevice(
                 api,
                 device,
             )
-        if whe_type == WheType.NuosSplit:
+        if whe_type == WheType.NuosSplit.value:
             return AristonNuosSplitDevice(
                 api,
                 device,
             )
-        if whe_type == WheType.Lux:
+        if whe_type == WheType.Lux.value:
             return AristonLuxDevice(
                 api,
                 device,
