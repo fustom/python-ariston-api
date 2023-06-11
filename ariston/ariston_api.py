@@ -20,8 +20,8 @@ from .const import (
     ARISTON_VELIS,
     DeviceFeatures,
     DeviceProperties,
-    EvoPlantMode,
     LydosPlantMode,
+    WaterHeaterMode,
     NuosSplitOperativeMode,
     PlantData,
     ThermostatProperties,
@@ -219,7 +219,7 @@ class AristonAPI:
             },
         )
 
-    def set_evo_mode(self, gw_id: str, value: EvoPlantMode) -> None:
+    def set_evo_mode(self, gw_id: str, value: WaterHeaterMode) -> None:
         """Set Velis Evo mode"""
         self._post(
             f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/mode",
@@ -543,7 +543,7 @@ class AristonAPI:
             },
         )
 
-    async def async_set_evo_mode(self, gw_id: str, value: EvoPlantMode) -> None:
+    async def async_set_evo_mode(self, gw_id: str, value: WaterHeaterMode) -> None:
         """Async set Velis Evo mode"""
         await self._async_post(
             f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/mode",
