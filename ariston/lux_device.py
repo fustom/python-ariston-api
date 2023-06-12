@@ -32,9 +32,10 @@ class AristonLuxDevice(AristonEvoDevice):
         await self.api.async_set_evo_mode(self.gw, LuxPlantMode[operation_mode])
         self.data[EvoDeviceProperties.MODE] = LuxPlantMode[operation_mode].value
 
-    def get_water_heater_target_temperature(self) -> Optional[float]:
+    @property
+    def water_heater_target_temperature(self) -> Optional[float]:
         """Get water heater target temperature"""
         if self.data.get(EvoDeviceProperties.MODE) == LuxPlantMode.BOOST:
-            return self.get_water_heater_maximum_setpoint_temperature_maximum()
+            return self.water_heater_maximum_setpoint_temperature_maximum
         else:
             return self.data.get(EvoLydosDeviceProperties.REQ_TEMP, None)
