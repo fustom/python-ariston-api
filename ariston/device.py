@@ -87,7 +87,8 @@ class AristonDevice(ABC):
         """Get device name wrapper"""
         return self.attributes.get(DeviceAttribute.NAME, None)
 
-    def get_dhw_mode_changeable(self) -> Optional[bool]:
+    @property
+    def dhw_mode_changeable(self) -> Optional[bool]:
         """Get device domestic hot water mode changeable wrapper"""
         return self.features.get(DeviceFeatures.DHW_MODE_CHANGEABLE, None)
 
@@ -209,10 +210,6 @@ class AristonDevice(ABC):
     async def async_set_water_heater_operation_mode(self, operation_mode: str) -> None:
         """Abstract method for async set water heater operation mode"""
         raise NotImplementedError
-
-    def get_consumption_sequence_last_changed_utc(self) -> dt.datetime:
-        """Get consumption sequence last changed in utc"""
-        return self.consumption_sequence_last_changed_utc
 
     @property
     def central_heating_total_energy_consumption(self) -> Any:
