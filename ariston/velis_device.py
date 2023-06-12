@@ -79,7 +79,8 @@ class AristonVelisDevice(AristonDevice, ABC):
         await self.api.async_set_velis_power(self.plant_data, self.gw, power)
         self.data[VelisDeviceProperties.ON] = power
 
-    def get_water_anti_leg_value(self) -> Optional[bool]:
+    @property
+    def water_anti_leg_value(self) -> Optional[bool]:
         """Get water heater anti-legionella value"""
         return self.plant_settings.get(self.anti_legionella_on_off, None)
 
@@ -105,11 +106,13 @@ class AristonVelisDevice(AristonDevice, ABC):
         )
         self.plant_settings[self.anti_legionella_on_off] = anti_leg
 
-    def get_water_heater_mode_operation_texts(self) -> list[str]:
+    @property
+    def water_heater_mode_operation_texts(self) -> list[str]:
         """Get water heater operation mode texts"""
         return [flag.name for flag in self.water_heater_mode]
 
-    def get_water_heater_mode_options(self) -> list[int]:
+    @property
+    def water_heater_mode_options(self) -> list[int]:
         """Get water heater operation options"""
         return [flag.value for flag in self.water_heater_mode]
 
@@ -149,49 +152,54 @@ class AristonVelisDevice(AristonDevice, ABC):
         self.features[DeviceFeatures.DHW_MODE_CHANGEABLE] = True
         await self.async_update_settings()
 
+    @property
     @abstractmethod
-    def get_water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
+    def water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
         """Get water heater maximum setpoint temperature minimum"""
         raise NotImplementedError
 
+    @property
     @abstractmethod
-    def get_water_heater_maximum_setpoint_temperature_maximum(self) -> Optional[float]:
+    def water_heater_maximum_setpoint_temperature_maximum(self) -> Optional[float]:
         """Get water heater maximum setpoint maximum temperature"""
         raise NotImplementedError
 
-    def get_water_heater_maximum_setpoint_temperature(self) -> Optional[float]:
+    @property
+    def water_heater_maximum_setpoint_temperature(self) -> Optional[float]:
         """Get water heater maximum setpoint temperature value"""
         return self.plant_settings.get(self.max_setpoint_temp, None)
 
-    def get_water_heater_minimum_temperature(self) -> float:
+    @property
+    def water_heater_minimum_temperature(self) -> float:
         """Get water heater minimum temperature"""
         return 40.0
 
-    def get_water_heater_maximum_temperature(self) -> Optional[float]:
+    @property
+    def water_heater_maximum_temperature(self) -> Optional[float]:
         """Get water heater maximum temperature"""
-        return self.get_water_heater_maximum_setpoint_temperature()
+        return self.water_heater_maximum_setpoint_temperature
 
-    def get_water_heater_temperature_step(self) -> int:
+    @property
+    def water_heater_temperature_step(self) -> int:
         """Get water heater temperature step"""
         return 1
 
-    def get_water_heater_temperature_decimals(self) -> int:
+    @property
+    def water_heater_temperature_decimals(self) -> int:
         """Get water heater temperature decimals"""
         return 0
 
-    def get_water_heater_temperature_unit(self) -> str:
+    @property
+    def water_heater_temperature_unit(self) -> str:
         """Get water heater temperature unit"""
         return "°C"
 
-    def get_water_heater_mode_value(self) -> Optional[int]:
+    @property
+    def water_heater_mode_value(self) -> Optional[int]:
         """Get water heater mode value"""
         return self.data.get(VelisDeviceProperties.MODE, None)
 
-    def get_water_heater_power_value(self) -> Optional[bool]:
+    @property
+    def water_heater_power_value(self) -> Optional[bool]:
         """Get water heater power value"""
         return self.data.get(VelisDeviceProperties.ON, None)
-
-    @staticmethod
-    def get_empty_unit() -> str:
-        """Get empty unit"""
-        return ""

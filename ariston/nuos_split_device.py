@@ -42,57 +42,68 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     def max_setpoint_temp(self) -> str:
         return SlpDeviceSettings.SLP_MAX_SETPOINT_TEMPERATURE
 
-    def get_water_heater_current_temperature(self) -> Optional[float]:
+    @property
+    def water_heater_current_temperature(self) -> Optional[float]:
         """Get water heater current temperature"""
         return self.data.get(NuosSplitProperties.WATER_TEMP, None)
 
-    def get_water_heater_target_temperature(self) -> Optional[float]:
+    @property
+    def water_heater_target_temperature(self) -> Optional[float]:
         """Get water heater target temperature"""
         return self.data.get(NuosSplitProperties.COMFORT_TEMP, None)
 
-    def get_water_heater_reduced_temperature(self) -> Optional[float]:
+    @property
+    def water_heater_reduced_temperature(self) -> Optional[float]:
         """Get water heater reduced temperature"""
         return self.data.get(NuosSplitProperties.REDUCED_TEMP, None)
 
-    def get_water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
+    @property
+    def water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
         """Get water heater maximum setpoint temperature minimum"""
         return self.plant_settings.get(
             SlpDeviceSettings.SLP_MAX_SETPOINT_TEMPERATURE_MIN, None
         )
 
-    def get_water_heater_maximum_setpoint_temperature_maximum(self) -> Optional[float]:
+    @property
+    def water_heater_maximum_setpoint_temperature_maximum(self) -> Optional[float]:
         """Get water heater maximum setpoint maximum temperature"""
         return self.plant_settings.get(
             SlpDeviceSettings.SLP_MAX_SETPOINT_TEMPERATURE_MAX, None
         )
 
-    def get_water_heater_minimum_setpoint_temperature(self) -> Optional[float]:
+    @property
+    def water_heater_minimum_setpoint_temperature(self) -> Optional[float]:
         """Get water heater minimum setpoint temperature value"""
         return self.plant_settings.get(
             SlpDeviceSettings.SLP_MIN_SETPOINT_TEMPERATURE, None
         )
 
-    def get_water_heater_minimum_setpoint_temperature_minimum(self) -> Optional[float]:
+    @property
+    def water_heater_minimum_setpoint_temperature_minimum(self) -> Optional[float]:
         """Get water heater minimum setpoint temperature minimum"""
         return self.plant_settings.get(
             SlpDeviceSettings.SLP_MIN_SETPOINT_TEMPERATURE_MIN, None
         )
 
-    def get_water_heater_minimum_setpoint_temperature_maximum(self) -> Optional[float]:
+    @property
+    def water_heater_minimum_setpoint_temperature_maximum(self) -> Optional[float]:
         """Get water heater minimum setpoint maximum temperature"""
         return self.plant_settings.get(
             SlpDeviceSettings.SLP_MIN_SETPOINT_TEMPERATURE_MAX, None
         )
 
-    def get_water_heater_preheating_on_off(self) -> Optional[bool]:
+    @property
+    def water_heater_preheating_on_off(self) -> Optional[bool]:
         """Get water heater preheating on off"""
         return self.plant_settings.get(SlpDeviceSettings.SLP_PRE_HEATING_ON_OFF, None)
 
-    def get_water_heater_heating_rate(self) -> Optional[float]:
+    @property
+    def water_heater_heating_rate(self) -> Optional[float]:
         """Get water heater heating rate"""
         return self.plant_settings.get(SlpDeviceSettings.SLP_HEATING_RATE, None)
 
-    def get_water_heater_boost(self) -> Optional[bool]:
+    @property
+    def water_heater_boost(self) -> Optional[bool]:
         """Get water heater boost"""
         return self.data.get(NuosSplitProperties.BOOST_ON, None)
 
@@ -116,7 +127,7 @@ class AristonNuosSplitDevice(AristonVelisDevice):
         """Set water heater temperature"""
         if len(self.data) == 0:
             self.update_state()
-        reduced = self.get_water_heater_reduced_temperature()
+        reduced = self.water_heater_reduced_temperature
         if reduced is None:
             reduced = 0
         self._set_water_heater_temperature(temperature, reduced)
@@ -133,7 +144,7 @@ class AristonNuosSplitDevice(AristonVelisDevice):
         """Async set water heater temperature"""
         if len(self.data) == 0:
             await self.async_update_state()
-        reduced = self.get_water_heater_reduced_temperature()
+        reduced = self.water_heater_reduced_temperature
         if reduced is None:
             reduced = 0
         await self._async_set_water_heater_temperature(temperature, reduced)
@@ -142,7 +153,7 @@ class AristonNuosSplitDevice(AristonVelisDevice):
         """Set water heater reduced temperature"""
         if len(self.data) == 0:
             self.update_state()
-        current = self.get_water_heater_current_temperature()
+        current = self.water_heater_current_temperature
         if current is None:
             current = 0
         self._set_water_heater_temperature(current, temperature)
@@ -151,9 +162,9 @@ class AristonNuosSplitDevice(AristonVelisDevice):
         """Set water heater reduced temperature"""
         if len(self.data) == 0:
             await self.async_update_state()
-        current = self.get_water_heater_current_temperature()
+        current = self.water_heater_current_temperature
         if current is None:
-            current = self.get_water_heater_minimum_temperature()
+            current = self.water_heater_minimum_temperature
         await self._async_set_water_heater_temperature(current, temperature)
 
     def set_water_heater_operation_mode(self, operation_mode: str):

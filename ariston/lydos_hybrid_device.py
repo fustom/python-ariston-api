@@ -44,19 +44,22 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
     def max_setpoint_temp(self) -> str:
         return SeDeviceSettings.SE_MAX_SETPOINT_TEMPERATURE
 
-    def get_water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
+    @property
+    def water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
         """Get water heater maximum setpoint temperature minimum"""
         return self.plant_settings.get(
             SeDeviceSettings.SE_MAX_SETPOINT_TEMPERATURE_MIN, None
         )
 
-    def get_water_heater_maximum_setpoint_temperature_maximum(self) -> Optional[float]:
+    @property
+    def water_heater_maximum_setpoint_temperature_maximum(self) -> Optional[float]:
         """Get water heater maximum setpoint maximum temperature"""
         return self.plant_settings.get(
             SeDeviceSettings.SE_MAX_SETPOINT_TEMPERATURE_MAX, None
         )
 
-    def get_electric_consumption_for_water_last_two_hours(self) -> int:
+    @property
+    def electric_consumption_for_water_last_two_hours(self) -> int:
         """Get electric consumption for water last value"""
         return self._get_consumption_sequence_last_value(
             ConsumptionType.DOMESTIC_HOT_WATER_HEATING_PUMP_ELECTRICITY,

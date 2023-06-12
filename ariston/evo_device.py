@@ -43,29 +43,34 @@ class AristonEvoDevice(AristonEvoLydosDevice):
     def max_setpoint_temp(self) -> str:
         return MedDeviceSettings.MED_MAX_SETPOINT_TEMPERATURE
 
-    def get_water_heater_eco_value(self) -> Optional[int]:
+    @property
+    def water_heater_eco_value(self) -> Optional[int]:
         """Get water heater eco value"""
         return self.data.get(EvoDeviceProperties.ECO, None)
 
-    def get_rm_tm_value(self) -> Optional[str]:
+    @property
+    def rm_tm_value(self) -> Optional[str]:
         """Get remaining time value"""
         return self.data.get(EvoDeviceProperties.RM_TM, None)
     
-    def get_rm_tm_in_minutes(self) -> int:
+    @property
+    def rm_tm_in_minutes(self) -> int:
         """Get remaining time value in minutes"""
-        rm_tm = self.get_rm_tm_value()
+        rm_tm = self.rm_tm_value
         if rm_tm is None:
             return -1
         time = datetime.strptime(rm_tm, "%H:%M:%S")
         return time.hour * 60 + time.minute
 
-    def get_water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
+    @property
+    def water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
         """Get water heater maximum setpoint temperature minimum"""
         return self.plant_settings.get(
             MedDeviceSettings.MED_MAX_SETPOINT_TEMPERATURE_MIN, None
         )
 
-    def get_water_heater_maximum_setpoint_temperature_maximum(self) -> Optional[float]:
+    @property
+    def water_heater_maximum_setpoint_temperature_maximum(self) -> Optional[float]:
         """Get water heater maximum setpoint maximum temperature"""
         return self.plant_settings.get(
             MedDeviceSettings.MED_MAX_SETPOINT_TEMPERATURE_MAX, None
