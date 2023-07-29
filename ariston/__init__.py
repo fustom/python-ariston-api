@@ -3,6 +3,8 @@ import asyncio
 import logging
 from typing import Any, Optional
 
+from ariston.bsb_device import AristonBsbDevice
+
 from .ariston_api import AristonAPI, ConnectionException
 from .const import (
     DeviceAttribute,
@@ -119,6 +121,9 @@ def _get_device(
             )
         _LOGGER.exception(f"Unsupported whe type {whe_type}")
         return None
+
+    if system_type == SystemType.BSB.value:
+        return AristonBsbDevice(api, device)
 
     _LOGGER.exception(f"Unsupported system type {system_type}")
     return None

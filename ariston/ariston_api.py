@@ -174,6 +174,14 @@ class AristonAPI:
         if properties is not None:
             return properties
         return dict()
+    
+    def get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
+        """Get BSB plant data."""
+        data = self._get(
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb}/{gw_id}")
+        if data is not None:
+            return data
+        return dict()
 
     def get_velis_plant_data(self, plant_data: PlantData, gw_id: str) -> dict[str, Any]:
         """Get Velis properties"""

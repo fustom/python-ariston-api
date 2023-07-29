@@ -21,6 +21,7 @@ class PlantData(str, Enum):
     Med = "medPlantData"
     Se = "sePlantData"
     Slp = "slpPlantData"
+    Bsb = "bsbPlantData"
 
 
 @unique
@@ -47,6 +48,15 @@ class ZoneMode(Enum):
     MANUAL = 2
     TIME_PROGRAM = 3
 
+@unique
+class BsbZoneMode(Enum):
+    """BSB zone mode enum"""
+
+    UNDEFINED = -1
+    OFF = 0
+    TIME_PROGRAM = 1
+    MANUAL = 2
+    MANUAL_NIGHT = 3
 
 @unique
 class DhwMode(Enum):
@@ -154,6 +164,13 @@ class Brands(Enum):
 class WaterHeaterMode(Enum):
     """Base class for plant modes"""
 
+
+@unique
+class BsbOperativeMode(WaterHeaterMode):
+    """BSB operative mode enum"""
+
+    OFF = 0
+    ON = 1
 
 @unique
 class LuxPlantMode(WaterHeaterMode):
@@ -391,6 +408,26 @@ class LydosDeviceProperties(EvoLydosDeviceProperties):
 
     BOOST_REQ_TEMP: Final[str] = "boostReqTemp"
 
+class BsbDeviceProperties:
+    """Constants for bsb device properties."""
+
+    DHW_MODE: Final[str] = "dhwMode"
+    DHW_COMF_TEMP: Final[str] = "dhwComfTemp"
+    DHW_REDU_TEMP: Final[str] = "dhwReduTemp"
+    DHW_TEMP: Final[str] = "dhwTemp"
+    ZONES: Final[str] = "zones"
+
+
+class BsbZoneProperties:
+    """Constants for bsb zone properties."""
+    
+    MODE: Final[str] = "mode"
+    CH_COMF_TEMP: Final[str] = "chComfTemp"
+    CH_RED_TEMP: Final[str] = "chRedTemp"
+    COOL_COMF_TEMP: Final[str] = "coolComfTemp"
+    COOL_RED_TEMP: Final[str] = "coolRedTemp"
+    ROOM_TEMP: Final[str] = "roomTemp"
+    DESIRED_ROOM_TEMP: Final[str] = "desiredRoomTemp"
 
 class MedDeviceSettings:
     """Constatns for Med device settings"""
