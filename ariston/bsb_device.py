@@ -145,8 +145,7 @@ class AristonBsbDevice(AristonDevice):
 
     def _get_water_heater_property(self, property_name) -> Any:
         """Method for getting water heater property"""
-        water_heater_mode = self.get_water_heater_mode_value()
-        device_attribute = BsbDeviceProperties.DHW_COMF_TEMP if water_heater_mode == BsbOperativeMode.ON else BsbDeviceProperties.DHW_REDU_TEMP
+        device_attribute = BsbDeviceProperties.DHW_COMF_TEMP if self.water_heater_mode_value == BsbOperativeMode.ON else BsbDeviceProperties.DHW_REDU_TEMP
         return self.data.get(device_attribute, dict()).get(property_name, None)
 
     def _get_zone_property(self, property_name: BsbZoneProperties, property_value: PropertyType, zone_number: int = 0) -> Any:
