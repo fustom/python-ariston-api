@@ -9,6 +9,7 @@ The following devices are currently supported:
 - Ariston Lydos Hybrid
 - Ariston Genus One
 - Ariston Nuos Split
+- Ariston Thision S
 
 ## Installation
 Use pip3 to install the latest version of this module.
