@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import logging
-import requests
-import aiohttp
-
 from typing import Any, Optional
+
+import aiohttp
+import requests
 
 from .const import (
     ARISTON_API_URL,
+    ARISTON_BSB_ZONES,
     ARISTON_DATA_ITEMS,
     ARISTON_LITE,
     ARISTON_LOGIN,
@@ -18,16 +19,17 @@ from .const import (
     ARISTON_REPORTS,
     ARISTON_TIME_PROGS,
     ARISTON_VELIS,
+    BsbOperativeMode,
+    BsbZoneMode,
     DeviceFeatures,
     DeviceProperties,
     LydosPlantMode,
-    WaterHeaterMode,
     NuosSplitOperativeMode,
     PlantData,
     ThermostatProperties,
+    WaterHeaterMode,
     ZoneAttribute,
 )
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -175,6 +177,13 @@ class AristonAPI:
             return properties
         return dict()
 
+    def get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
+        """Get BSB plant data."""
+        data = self._get(f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb}/{gw_id}")
+        if data is not None:
+            return data
+        return dict()
+
     def get_velis_plant_data(self, plant_data: PlantData, gw_id: str) -> dict[str, Any]:
         """Get Velis properties"""
         data = self._get(f"{ARISTON_API_URL}{ARISTON_VELIS}/{plant_data.value}/{gw_id}")
@@ -246,6 +255,24 @@ class AristonAPI:
             },
         )
 
+    def set_bsb_mode(self, gw_id: str, value: BsbOperativeMode) -> None:
+        """Set Bsb mode"""
+        self._post(
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/dhwMode",
+            {
+                "new": value.value,
+            },
+        )
+
+    def set_bsb_zone_mode(self, gw_id: str, zone: int, value: BsbZoneMode) -> None:
+        """Set Bsb zone mode"""
+        self._post(
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/mode",
+            {
+                "new": value.value,
+            },
+        )
+
     def set_evo_temperature(self, gw_id: str, value: float) -> None:
         """Set Velis Evo temperature"""
         self._post(
@@ -272,6 +299,32 @@ class AristonAPI:
                 "new": {
                     "comfort": comfort,
                     "reduced": reduced,
+                }
+            },
+        )
+
+    def set_bsb_temperature(self, gw_id: str, comfort: float, reduced: float) -> None:
+        """Set Bsb temperature"""
+        self._post(
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/dhwTemp",
+            {
+                "new": {
+                    "comf": comfort,
+                    "econ": reduced,
+                }
+            },
+        )
+
+    def set_bsb_zone_temperature(
+        self, gw_id: str, zone: int, comfort: float, reduced: float
+    ) -> None:
+        """Set Bsb zone temperature"""
+        self._post(
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/{zone}/temperatures",
+            {
+                "new": {
+                    "comf": comfort,
+                    "econ": reduced,
                 }
             },
         )
@@ -495,6 +548,15 @@ class AristonAPI:
             return properties
         return dict()
 
+    async def async_get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
+        """Get BSB plant data."""
+        data = await self._async_get(
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb}/{gw_id}"
+        )
+        if data is not None:
+            return data
+        return dict()
+
     async def async_get_velis_plant_data(
         self, plant_data: PlantData, gw_id: str
     ) -> dict[str, Any]:
@@ -572,6 +634,26 @@ class AristonAPI:
             },
         )
 
+    async def async_set_bsb_mode(self, gw_id: str, value: BsbOperativeMode) -> None:
+        """Async set Bsb mode"""
+        await self._async_post(
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/dhwMode",
+            {
+                "new": value.value,
+            },
+        )
+
+    async def async_set_bsb_zone_mode(
+        self, gw_id: str, zone: int, value: BsbZoneMode
+    ) -> None:
+        """Async set Bsb zone mode"""
+        await self._async_post(
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/mode",
+            {
+                "new": value.value,
+            },
+        )
+
     async def async_set_evo_temperature(self, gw_id: str, value: float) -> None:
         """Async set Velis Evo temperature"""
         await self._async_post(
@@ -600,6 +682,34 @@ class AristonAPI:
                 "new": {
                     "comfort": comfort,
                     "reduced": reduced,
+                }
+            },
+        )
+
+    async def async_set_bsb_temperature(
+        self, gw_id: str, comfort: float, reduced: float
+    ) -> None:
+        """Async set Bsb temperature"""
+        await self._async_post(
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/dhwTemp",
+            {
+                "new": {
+                    "comf": comfort,
+                    "econ": reduced,
+                }
+            },
+        )
+
+    async def async_set_bsb_zone_temperature(
+        self, gw_id: str, zone: int, comfort: float, reduced: float
+    ) -> None:
+        """Async set Bsb zone temperature"""
+        await self._async_post(
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/{zone}/temperatures",
+            {
+                "new": {
+                    "comf": comfort,
+                    "econ": reduced,
                 }
             },
         )

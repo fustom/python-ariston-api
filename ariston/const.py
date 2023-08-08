@@ -9,6 +9,7 @@ ARISTON_PLANTS: Final[str] = "plants"
 ARISTON_LITE: Final[str] = "lite"
 ARISTON_DATA_ITEMS: Final[str] = "dataItems"
 ARISTON_ZONES: Final[str] = "zones"
+ARISTON_BSB_ZONES: Final[str] = "bsbZones"
 ARISTON_PLANT_DATA: Final[str] = "plantData"
 ARISTON_REPORTS: Final[str] = "reports"
 ARISTON_TIME_PROGS: Final[str] = "timeProgs"
@@ -21,6 +22,7 @@ class PlantData(str, Enum):
     Med = "medPlantData"
     Se = "sePlantData"
     Slp = "slpPlantData"
+    Bsb = "bsbPlantData"
 
 
 @unique
@@ -47,6 +49,15 @@ class ZoneMode(Enum):
     MANUAL = 2
     TIME_PROGRAM = 3
 
+@unique
+class BsbZoneMode(Enum):
+    """BSB zone mode enum"""
+
+    UNDEFINED = -1
+    OFF = 0
+    TIME_PROGRAM = 1
+    MANUAL = 2
+    MANUAL_NIGHT = 3
 
 @unique
 class DhwMode(Enum):
@@ -154,6 +165,13 @@ class Brands(Enum):
 class WaterHeaterMode(Enum):
     """Base class for plant modes"""
 
+
+@unique
+class BsbOperativeMode(WaterHeaterMode):
+    """BSB operative mode enum"""
+
+    OFF = 0
+    ON = 1
 
 @unique
 class LuxPlantMode(WaterHeaterMode):
@@ -391,6 +409,45 @@ class LydosDeviceProperties(EvoLydosDeviceProperties):
 
     BOOST_REQ_TEMP: Final[str] = "boostReqTemp"
 
+class BsbDeviceProperties:
+    """Constants for bsb device properties."""
+
+    DHW_COMF_TEMP: Final[str] = "dhwComfTemp"
+    DHW_ENABLED: Final[str] = "dhwEnabled"
+    DHW_MODE: Final[str] = "dhwMode"
+    DHW_PROG_READ_ONLY: Final[str] = "dhwProgReadOnly"
+    DHW_REDU_TEMP: Final[str] = "dhwReduTemp"
+    DHW_STORAGE_TEMP_ERROR: Final[str] = "dhwStorageTempError"
+    DHW_TEMP: Final[str] = "dhwTemp"
+    FLAME: Final[str] = "flame"
+    GW: Final[str] = "gw"
+    HAS_DHW_TEMP: Final[str] = "hasDhwTemp"
+    HAS_OUT_TEMP: Final[str] = "hasOutTemp"
+    HP_ON: Final[str] = "hpOn"
+    OUTSIDE_TEMP_ERROR: Final[str] = "outsideTempError"
+    OUT_TEMP: Final[str] = "outTemp"
+    ZONES: Final[str] = "zones"
+
+
+class BsbZoneProperties:
+    """Constants for bsb zone properties."""
+    
+    CH_COMF_TEMP: Final[str] = "chComfTemp"
+    CH_PROT_TEMP: Final[str] = "chProtTemp"
+    CH_RED_TEMP: Final[str] = "chRedTemp"
+    COOL_COMF_TEMP: Final[str] = "coolComfTemp"
+    COOLING_ON: Final[str] = "coolingOn"
+    COOL_PROT_TEMP: Final[str] = "coolProtTemp"
+    COOL_RED_TEMP: Final[str] = "coolRedTemp"
+    DESIRED_ROOM_TEMP: Final[str] = "desiredRoomTemp"
+    HAS_ROOM_SENS: Final[str] = "hasRoomSens"
+    HEATING_ON: Final[str] = "heatingOn"
+    HEAT_OR_COOL_REQ: Final[str] = "heatOrCoolReq"
+    HOLIDAYS: Final[str] = "holidays"
+    MODE: Final[str] = "mode"
+    ROOM_TEMP: Final[str] = "roomTemp"
+    ROOM_TEMP_ERROR: Final[str] = "roomTempError"
+    USE_REDUCED_OPERATION_MODE_ON_HOLIDAY: Final[str] = "useReducedOperationModeOnHoliday"
 
 class MedDeviceSettings:
     """Constatns for Med device settings"""
@@ -505,3 +562,4 @@ class PropertyType:
     DECIMALS: Final[str] = "decimals"
     ZONE: Final[str] = "zone"
     EXPIRES_ON: Final[str] = "expiresOn"
+    ALLOWED_OPTIONS: Final[str] = "allowedOptions"

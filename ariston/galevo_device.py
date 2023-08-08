@@ -46,6 +46,11 @@ class AristonGalevoDevice(AristonDevice):
     def consumption_type(self) -> str:
         """String to get consumption type"""
         return f"Ch{'%2CDhw' if self.custom_features.get(CustomDeviceFeatures.HAS_DHW) else ''}"
+    
+    @property
+    def plant_mode_supported(self) -> bool:
+        """Returns is plant mode supported"""
+        return True
 
     def _update_state(self) -> None:
         """Set custom features"""
