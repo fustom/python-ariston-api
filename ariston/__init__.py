@@ -86,7 +86,7 @@ def _get_device(
         None,
     )
     if device is None:
-        _LOGGER.exception(f'No device "{gateway}" found.')
+        _LOGGER.exception("No device %s found.", gateway)
         return None
 
     system_type = device.get(DeviceAttribute.SYS)
@@ -119,13 +119,13 @@ def _get_device(
                 api,
                 device,
             )
-        _LOGGER.exception(f"Unsupported whe type {whe_type}")
+        _LOGGER.exception("Unsupported whe type %s", whe_type)
         return None
 
     if system_type == SystemType.BSB.value:
         return AristonBsbDevice(api, device)
 
-    _LOGGER.exception(f"Unsupported system type {system_type}")
+    _LOGGER.exception("Unsupported system type %s", system_type)
     return None
 
 

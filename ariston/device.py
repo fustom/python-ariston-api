@@ -287,7 +287,7 @@ class AristonDevice(ABC):
 
         return None
 
-    def _update_energy(self, old_consumptions_sequences: list[dict[str, Any]]) -> None:
+    def _update_energy(self, old_consumptions_sequences: Optional[list[dict[str, Any]]]) -> None:
         """Update the device energy settings"""
         if (
             self.custom_features.get(
@@ -327,7 +327,7 @@ class AristonDevice(ABC):
                         consumption_type,
                         ConsumptionTimeInterval.LAST_DAY,
                     )
-                    != None
+                    is not None
                 ):
                     self.custom_features[consumption_type.name] = True
                 else:
