@@ -21,7 +21,7 @@ class AristonBsbDevice(AristonDevice):
     def consumption_type(self) -> str:
         """String to get consumption type"""
         return f"Ch{'%2CDhw'}"
-    
+
     @property
     def plant_mode_supported(self) -> bool:
         """Returns is plant mode supported"""
@@ -104,7 +104,7 @@ class AristonBsbDevice(AristonDevice):
         return (
             BsbZoneMode.MANUAL.value or BsbZoneMode.MANUAL_NIGHT.value
         ) in self.get_zone_mode_options(zone)
-    
+
     def is_zone_mode_options_contains_time_program(self, zone: int) -> bool:
         """Is zone mode options contains time program mode"""
         return BsbZoneMode.TIME_PROGRAM.value in self.get_zone_mode_options(zone)
