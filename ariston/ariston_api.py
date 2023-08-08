@@ -406,7 +406,7 @@ class AristonAPI:
             params,
         )
         response = requests.request(
-            method, path, params=params, json=body, headers=headers
+            method, path, params=params, json=body, headers=headers, timeout=30000
         )
         if not response.ok:
             if response.status_code == 405:

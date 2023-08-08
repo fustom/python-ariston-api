@@ -10,6 +10,7 @@ from .const import (
     EvoDeviceProperties,
     MedDeviceSettings,
     PlantData,
+    WaterHeaterMode,
 )
 from .evo_lydos_device import AristonEvoLydosDevice
 
@@ -35,7 +36,7 @@ class AristonEvoDevice(AristonEvoLydosDevice):
         return "Dhw"
 
     @property
-    def water_heater_mode(self) -> type[EvoPlantMode]:
+    def water_heater_mode(self) -> type[WaterHeaterMode]:
         """Return the water heater mode class"""
         return EvoPlantMode
 
@@ -52,7 +53,7 @@ class AristonEvoDevice(AristonEvoLydosDevice):
     def rm_tm_value(self) -> Optional[str]:
         """Get remaining time value"""
         return self.data.get(EvoDeviceProperties.RM_TM, None)
-    
+
     @property
     def rm_tm_in_minutes(self) -> int:
         """Get remaining time value in minutes"""

@@ -1,3 +1,4 @@
+"""Constants for ariston module"""
 from enum import Enum, unique
 from typing import Final
 
@@ -431,7 +432,7 @@ class BsbDeviceProperties:
 
 class BsbZoneProperties:
     """Constants for bsb zone properties."""
-    
+
     CH_COMF_TEMP: Final[str] = "chComfTemp"
     CH_PROT_TEMP: Final[str] = "chProtTemp"
     CH_RED_TEMP: Final[str] = "chRedTemp"

@@ -46,7 +46,7 @@ class AristonGalevoDevice(AristonDevice):
     def consumption_type(self) -> str:
         """String to get consumption type"""
         return f"Ch{'%2CDhw' if self.custom_features.get(CustomDeviceFeatures.HAS_DHW) else ''}"
-    
+
     @property
     def plant_mode_supported(self) -> bool:
         """Returns is plant mode supported"""
@@ -222,28 +222,28 @@ class AristonGalevoDevice(AristonDevice):
 
     def is_zone_mode_options_contains_manual(self, zone: int) -> bool:
         """Is zone mode options contains manual mode"""
-        return (ZoneMode.MANUAL or ZoneMode.MANUAL_NIGHT) in self.get_zone_mode_options(
+        return (ZoneMode.MANUAL.value or ZoneMode.MANUAL_NIGHT.value) in self.get_zone_mode_options(
             zone
         )
 
     def is_zone_mode_options_contains_time_program(self, zone: int) -> bool:
         """Is zone mode options contains time program mode"""
-        return ZoneMode.TIME_PROGRAM in self.get_zone_mode_options(zone)
+        return ZoneMode.TIME_PROGRAM.value in self.get_zone_mode_options(zone)
 
     def is_zone_mode_options_contains_off(self, zone: int) -> bool:
         """Is zone mode options contains off mode"""
-        return ZoneMode.OFF in self.get_zone_mode_options(zone)
+        return ZoneMode.OFF.value in self.get_zone_mode_options(zone)
 
     @property
     def is_plant_mode_options_contains_off(self) -> bool:
         """Is plant mode options contains off mode"""
-        return PlantMode.OFF in self.plant_mode_options
+        return PlantMode.OFF.value in self.plant_mode_options
 
     @property
     def is_plant_mode_options_contains_cooling(self) -> bool:
         """Is plant mode options contains cooling mode"""
         return (
-            PlantMode.COOLING or PlantMode.COOLING_ONLY
+            PlantMode.COOLING.value or PlantMode.COOLING_ONLY.value
         ) in self.plant_mode_options
 
     @staticmethod
@@ -315,9 +315,9 @@ class AristonGalevoDevice(AristonDevice):
     def is_flame_on_value(self) -> bool:
         """Get is flame on value"""
         return self._get_item_by_id(DeviceProperties.IS_FLAME_ON, PropertyType.VALUE)
-        
+
     @property
-    def is_heating_pump_on_value(self) -> bool:                              
+    def is_heating_pump_on_value(self) -> bool:
         """Get is heating pump on value"""                                           
         return self._get_item_by_id(DeviceProperties.IS_HEATING_PUMP_ON, PropertyType.VALUE)
 
@@ -800,7 +800,7 @@ class AristonGalevoDevice(AristonDevice):
         self._set_item_by_id(item_id, value, zone_number)
 
     @staticmethod
-    def _create_holiday_end_date(holiday_end: date):
+    def _create_holiday_end_date(holiday_end: Optional[date]):
         return (
             None if holiday_end is None else holiday_end.strftime("%Y-%m-%dT00:00:00")
         )

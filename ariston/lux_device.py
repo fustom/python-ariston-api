@@ -7,7 +7,8 @@ from typing import Optional
 from .const import (
     LuxPlantMode,
     EvoDeviceProperties,
-    EvoLydosDeviceProperties
+    EvoLydosDeviceProperties,
+    WaterHeaterMode
 )
 from .evo_device import AristonEvoDevice
 
@@ -18,7 +19,7 @@ class AristonLuxDevice(AristonEvoDevice):
     """Class representing a physical device, it's state and properties."""
 
     @property
-    def water_heater_mode(self) -> type[LuxPlantMode]:
+    def water_heater_mode(self) -> type[WaterHeaterMode]:
         """Return the water heater mode class"""
         return LuxPlantMode
 
