@@ -1,9 +1,15 @@
 """BSB device class for Ariston module."""
 import logging
 from typing import Any, Optional
-from .const import BsbZoneMode, BsbZoneProperties, BsbOperativeMode, BsbDeviceProperties, PlantMode, PropertyType
-from .device import AristonDevice
 
+from .const import (
+    BsbDeviceProperties,
+    BsbOperativeMode,
+    BsbZoneMode,
+    BsbZoneProperties,
+    PropertyType,
+)
+from .device import AristonDevice
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,11 +21,11 @@ class AristonBsbDevice(AristonDevice):
     def consumption_type(self) -> str:
         """String to get consumption type"""
         return f"Ch{'%2CDhw'}"
-
+    
     @property
-    def water_heater_mode(self) -> type[BsbOperativeMode]:
-        """Return the water heater mode class"""
-        return BsbOperativeMode
+    def plant_mode_supported(self) -> bool:
+        """Returns is plant mode supported"""
+        return False
 
     def update_state(self) -> None:
         """Update the device states from the cloud."""
@@ -29,17 +35,31 @@ class AristonBsbDevice(AristonDevice):
         """Async update the device states from the cloud."""
         self.data = await self.api.async_get_bsb_plant_data(self.gw)
 
-    def is_plant_in_heat_mode(self) -> bool:
-        """Is the plant in a heat mode"""
-        return self.get_plant_mode() in [
-            PlantMode.WINTER,
-            PlantMode.HEATING_ONLY,
-        ]
+    @property
+    def zone_numbers(self) -> list[int]:
+        """Get zone number for device"""
+        return [int(zone) for zone in self.zones]
+
+    @property
+    def zones(self) -> dict[str, dict[str, Any]]:
+        """Get device zones wrapper"""
+        return self.data.get(BsbDeviceProperties.ZONES, dict())
+
+    def get_zone(self, zone: int) -> dict[str, Any]:
+        """Get device zone"""
+        return self.zones.get(str(zone), dict())
+
+    def get_zone_ch_comf_temp(self, zone: int) -> dict[str, Any]:
+        """Get device zone central heating comfort temperature"""
+        return self.get_zone(zone).get(BsbDeviceProperties.DHW_COMF_TEMP, dict())
 
     def get_zone_mode(self, zone: int) -> BsbZoneMode:
         """Get zone mode on value"""
-        zone_mode = self._get_zone_property(
-            BsbZoneProperties.MODE, PropertyType.VALUE, zone)
+        zone_mode = (
+            self.get_zone(zone)
+            .get(BsbZoneProperties.MODE, dict())
+            .get(PropertyType.VALUE, None)
+        )
 
         if zone_mode is None:
             return BsbZoneMode.UNDEFINED
@@ -48,25 +68,55 @@ class AristonBsbDevice(AristonDevice):
 
     def get_zone_mode_options(self, zone: int) -> list[int]:
         """Get zone mode on options"""
-        return self._get_zone_property(
-            BsbZoneProperties.MODE, PropertyType.ALLOWED_OPTIONS, zone)
+        return (
+            self.get_zone(zone)
+            .get(BsbZoneProperties.MODE, dict())
+            .get(PropertyType.ALLOWED_OPTIONS, None)
+        )
 
-    def get_plant_mode(self) -> PlantMode:
-        """Get plant mode on value"""
-        # TODO: I don't know how to determine this correctly
-        return PlantMode.WINTER
+    @property
+    def is_plant_in_heat_mode(self) -> bool:
+        """Is the plant in a heat mode"""
+        return not self.is_plant_in_cool_mode
 
-    def get_plant_mode_options(self) -> list[int]:
-        """Get plant mode on options"""
-        return [PlantMode.SUMMER.value, PlantMode.WINTER.value, PlantMode.OFF.value, PlantMode.HOLIDAY.value]
+    @property
+    def is_plant_in_cool_mode(self) -> bool:
+        """Is the plant in a cool mode"""
+        return self.get_zone(self.zone_numbers[0]).get(
+            BsbZoneProperties.COOLING_ON, False
+        )
 
-    def get_plant_mode_opt_texts(self) -> list[str]:
-        """Get plant mode on option texts"""
-        return [PlantMode.SUMMER, PlantMode.WINTER, PlantMode.OFF, PlantMode.HOLIDAY]
+    def is_zone_in_manual_mode(self, zone: int) -> bool:
+        """Is zone in manual mode"""
+        return self.get_zone_mode(zone) in [
+            BsbZoneMode.MANUAL,
+            BsbZoneMode.MANUAL_NIGHT,
+        ]
 
-    def get_plant_mode_text(self) -> str:
-        """Get plant mode on option texts"""
-        self.get_plant_mode()
+    def is_zone_in_time_program_mode(self, zone: int) -> bool:
+        """Is zone in time program mode"""
+        return self.get_zone_mode(zone) in [
+            BsbZoneMode.TIME_PROGRAM,
+        ]
+
+    def is_zone_mode_options_contains_manual(self, zone: int) -> bool:
+        """Is zone mode options contains manual mode"""
+        return (
+            BsbZoneMode.MANUAL.value or BsbZoneMode.MANUAL_NIGHT.value
+        ) in self.get_zone_mode_options(zone)
+    
+    def is_zone_mode_options_contains_time_program(self, zone: int) -> bool:
+        """Is zone mode options contains time program mode"""
+        return BsbZoneMode.TIME_PROGRAM.value in self.get_zone_mode_options(zone)
+
+    def is_zone_mode_options_contains_off(self, zone: int) -> bool:
+        """Is zone mode options contains off mode"""
+        return BsbZoneMode.OFF.value in self.get_zone_mode_options(zone)
+
+    @property
+    def is_flame_on_value(self) -> bool:
+        """Get is flame on value"""
+        return self.data.get(BsbDeviceProperties.FLAME, False)
 
     @property
     def water_heater_current_temperature(self) -> Optional[float]:
@@ -76,17 +126,58 @@ class AristonBsbDevice(AristonDevice):
     @property
     def water_heater_minimum_temperature(self) -> float:
         """Method for getting water heater minimum temperature"""
-        return self._get_water_heater_property(PropertyType.MIN)
+        return self.data.get(BsbDeviceProperties.DHW_COMF_TEMP, dict()).get(
+            PropertyType.MIN, None
+        )
+
+    @property
+    def water_heater_reduced_minimum_temperature(self) -> Optional[float]:
+        """Get water heater reduced temperature"""
+        return self.data.get(BsbDeviceProperties.DHW_REDU_TEMP, dict()).get(
+            PropertyType.MIN, None
+        )
 
     @property
     def water_heater_target_temperature(self) -> Optional[float]:
         """Method for getting water heater target temperature"""
-        return self._get_water_heater_property(PropertyType.VALUE)
+        return self.data.get(BsbDeviceProperties.DHW_COMF_TEMP, dict()).get(
+            PropertyType.VALUE, None
+        )
+
+    @property
+    def water_heater_reduced_temperature(self) -> Optional[float]:
+        """Get water heater reduced temperature"""
+        return self.data.get(BsbDeviceProperties.DHW_REDU_TEMP, dict()).get(
+            PropertyType.VALUE, None
+        )
 
     @property
     def water_heater_maximum_temperature(self) -> Optional[float]:
         """Method for getting water heater maximum temperature"""
-        return self._get_water_heater_property(PropertyType.MAX)
+        return self.data.get(BsbDeviceProperties.DHW_COMF_TEMP, dict()).get(
+            PropertyType.MAX, None
+        )
+
+    @property
+    def water_heater_reduced_maximum_temperature(self) -> Optional[float]:
+        """Get water heater reduced temperature"""
+        return self.data.get(BsbDeviceProperties.DHW_REDU_TEMP, dict()).get(
+            PropertyType.MAX, None
+        )
+
+    @property
+    def water_heater_temperature_step(self) -> int:
+        """Method for getting water heater temperature step"""
+        return self.data.get(BsbDeviceProperties.DHW_COMF_TEMP, dict()).get(
+            PropertyType.STEP, None
+        )
+
+    @property
+    def water_heater_reduced_temperature_step(self) -> Optional[float]:
+        """Get water heater reduced temperature"""
+        return self.data.get(BsbDeviceProperties.DHW_REDU_TEMP, dict()).get(
+            PropertyType.STEP, None
+        )
 
     @property
     def water_heater_temperature_decimals(self) -> int:
@@ -101,52 +192,112 @@ class AristonBsbDevice(AristonDevice):
     @property
     def water_heater_mode_operation_texts(self) -> list[str]:
         """Get water heater operation mode texts"""
-        return [flag.name for flag in self.water_heater_mode]
+        return [flag.name for flag in BsbOperativeMode]
 
     @property
     def water_heater_mode_options(self) -> list[int]:
         """Get water heater operation options"""
-        return [flag.value for flag in self.water_heater_mode]
+        return [flag.value for flag in BsbOperativeMode]
 
     @property
     def water_heater_mode_value(self) -> Optional[int]:
         """Method for getting water heater mode value"""
-        return self.data.get(BsbDeviceProperties.DHW_MODE, dict()).get(PropertyType.VALUE, None)
+        return self.data.get(BsbDeviceProperties.DHW_MODE, dict()).get(
+            PropertyType.VALUE, None
+        )
 
-    def set_water_heater_temperature(self, temperature: float) -> None:
-        """Abstract method for set water temperature"""
-        raise NotImplementedError
+    def get_measured_temp_unit(self, zone: int) -> str:
+        """Get zone measured temp unit"""
+        return "°C"
 
-    async def async_set_water_heater_temperature(self, temperature: float) -> None:
-        """Abstract method for async set water temperature"""
-        raise NotImplementedError
+    def get_measured_temp_decimals(self, zone: int) -> int:
+        """Get zone measured temp decimals"""
+        return 1
 
-    @property
-    def water_heater_temperature_step(self) -> int:
-        """Method for getting water heater temperature step"""
-        return self._get_water_heater_property(PropertyType.STEP)
+    def get_comfort_temp_min(self, zone: int) -> int:
+        """Get zone comfort temp min"""
+        return self.get_zone_ch_comf_temp(zone).get(PropertyType.MIN, 7)
+
+    def get_comfort_temp_max(self, zone: int) -> int:
+        """Get zone comfort temp max"""
+        return self.get_zone_ch_comf_temp(zone).get(PropertyType.MAX, 35)
+
+    def get_comfort_temp_step(self, zone: int) -> int:
+        """Get zone comfort temp step"""
+        return self.get_zone_ch_comf_temp(zone).get(PropertyType.STEP, 1)
+
+    def get_measured_temp_value(self, zone: int) -> int:
+        """Get zone measured temp value"""
+        return self.get_zone(zone).get(BsbZoneProperties.ROOM_TEMP, None)
+
+    def get_comfort_temp_value(self, zone: int) -> int:
+        """Get zone comfort temp value"""
+        return self.get_zone_ch_comf_temp(zone).get(PropertyType.VALUE, None)
+
+    def set_water_heater_temperature(self, temperature: float):
+        """Set water heater temperature"""
+        if len(self.data) == 0:
+            self.update_state()
+        reduced = self.water_heater_reduced_temperature
+        if reduced is None:
+            reduced = 0
+        self._set_water_heater_temperature(temperature, reduced)
+
+    async def async_set_water_heater_temperature(self, temperature: float):
+        """Async set water heater temperature"""
+        if len(self.data) == 0:
+            await self.async_update_state()
+        reduced = self.water_heater_reduced_temperature
+        if reduced is None:
+            reduced = 0
+        await self._async_set_water_heater_temperature(temperature, reduced)
 
     def set_water_heater_operation_mode(self, operation_mode: str) -> None:
-        """Abstract method for set water heater operation mode"""
-        bsb_operative_mode = BsbOperativeMode[operation_mode]
-        self.api.set_bsb_dhw_mode(
-            self.gw, bsb_operative_mode, BsbOperativeMode(self.get_water_heater_mode_value()))
-
-        self.data.get(BsbDeviceProperties.DHW_MODE, dict())[
-            PropertyType.VALUE] = bsb_operative_mode
+        """Set water heater operation mode"""
+        self.api.set_bsb_mode(self.gw, BsbOperativeMode[operation_mode])
+        self.data[BsbDeviceProperties.DHW_MODE] = BsbOperativeMode[operation_mode].value
 
     async def async_set_water_heater_operation_mode(self, operation_mode: str) -> None:
-        """Abstract method for async set water heater operation mode"""
-        bsb_operative_mode = BsbOperativeMode[operation_mode]
-        await self.api.async_set_bsb_dhw_mode(self.gw, bsb_operative_mode, BsbOperativeMode(self.get_water_heater_mode_value()))
+        """Async set water heater operation mode"""
+        await self.api.async_set_bsb_mode(self.gw, BsbOperativeMode[operation_mode])
+        self.data[BsbDeviceProperties.DHW_MODE] = BsbOperativeMode[operation_mode].value
 
-        self.data.get(BsbDeviceProperties.DHW_MODE, dict())[
-            PropertyType.VALUE] = bsb_operative_mode
+    def set_water_heater_reduced_temperature(self, temperature: float):
+        """Set water heater reduced temperature"""
+        if len(self.data) == 0:
+            self.update_state()
+        current = self.water_heater_current_temperature
+        if current is None:
+            current = 0
+        self._set_water_heater_temperature(current, temperature)
 
-    def _get_water_heater_property(self, property_name) -> Any:
-        """Method for getting water heater property"""
-        device_attribute = BsbDeviceProperties.DHW_COMF_TEMP if self.water_heater_mode_value == BsbOperativeMode.ON else BsbDeviceProperties.DHW_REDU_TEMP
-        return self.data.get(device_attribute, dict()).get(property_name, None)
+    async def async_set_water_heater_reduced_temperature(self, temperature: float):
+        """Async set water heater temperature"""
+        if len(self.data) == 0:
+            await self.async_update_state()
+        current = self.water_heater_current_temperature
+        if current is None:
+            current = 0
+        await self._async_set_water_heater_temperature(current, temperature)
 
-    def _get_zone_property(self, property_name: BsbZoneProperties, property_value: PropertyType, zone_number: int = 0) -> Any:
-        return self.data.get(BsbDeviceProperties.ZONES, dict()).get(str(zone_number), dict()).get(property_name, dict()).get(property_value, None)
+    def _set_water_heater_temperature(self, temperature: float, reduced: float):
+        """Set water heater temperature"""
+        self.api.set_bsb_temperature(self.gw, temperature, reduced)
+        self.data[BsbDeviceProperties.DHW_COMF_TEMP] = temperature
+        self.data[BsbDeviceProperties.DHW_REDU_TEMP] = reduced
+
+    async def _async_set_water_heater_temperature(
+        self, temperature: float, reduced: float
+    ):
+        """Async set water heater temperature"""
+        await self.api.async_set_bsb_temperature(self.gw, temperature, reduced)
+        self.data[BsbDeviceProperties.DHW_COMF_TEMP] = temperature
+        self.data[BsbDeviceProperties.DHW_REDU_TEMP] = reduced
+
+    def set_zone_mode(self, zone_mode: BsbZoneMode, zone: int):
+        """Set zone mode"""
+        self.api.set_bsb_zone_mode(self.gw, zone, zone_mode)
+
+    async def async_set_zone_mode(self, zone_mode: BsbZoneMode, zone: int):
+        """Async set zone mode"""
+        await self.api.async_set_bsb_zone_mode(self.gw, zone, zone_mode)
