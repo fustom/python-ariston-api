@@ -7,6 +7,7 @@ from .const import (
     BsbOperativeMode,
     BsbZoneMode,
     BsbZoneProperties,
+    CustomDeviceFeatures,
     PropertyType,
 )
 from .device import AristonDevice
@@ -34,6 +35,19 @@ class AristonBsbDevice(AristonDevice):
     async def async_update_state(self) -> None:
         """Async update the device states from the cloud."""
         self.data = await self.api.async_get_bsb_plant_data(self.gw)
+
+    def _get_features(self) -> None:
+        self.custom_features[CustomDeviceFeatures.HAS_DHW] = True
+
+    def get_features(self) -> None:
+        """Get device features wrapper"""
+        super().get_features()
+        self._get_features()
+
+    async def async_get_features(self) -> None:
+        """Async get device features wrapper"""
+        await super().async_get_features()
+        self._get_features()
 
     @property
     def zone_numbers(self) -> list[int]:
