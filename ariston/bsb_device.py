@@ -38,6 +38,7 @@ class AristonBsbDevice(AristonDevice):
 
     def _get_features(self) -> None:
         self.custom_features[CustomDeviceFeatures.HAS_DHW] = True
+        self.custom_features[CustomDeviceFeatures.HAS_OUTSIDE_TEMP] = True
 
     def get_features(self) -> None:
         """Get device features wrapper"""
@@ -315,3 +316,13 @@ class AristonBsbDevice(AristonDevice):
     async def async_set_zone_mode(self, zone_mode: BsbZoneMode, zone: int):
         """Async set zone mode"""
         await self.api.async_set_bsb_zone_mode(self.gw, zone, zone_mode)
+
+    @property
+    def outside_temp_value(self) -> str:
+        """Get outside temperature value"""
+        return self.data.get(BsbDeviceProperties.OUT_TEMP, 0)
+
+    @property
+    def outside_temp_unit(self) -> str:
+        """Get outside temperature unit"""
+        return "°C"
