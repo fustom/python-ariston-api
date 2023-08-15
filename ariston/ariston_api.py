@@ -179,7 +179,7 @@ class AristonAPI:
 
     def get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
         """Get BSB plant data."""
-        data = self._get(f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb}/{gw_id}")
+        data = self._get(f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}")
         if data is not None:
             return data
         return dict()
@@ -551,7 +551,7 @@ class AristonAPI:
     async def async_get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
         """Get BSB plant data."""
         data = await self._async_get(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb}/{gw_id}"
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}"
         )
         if data is not None:
             return data
