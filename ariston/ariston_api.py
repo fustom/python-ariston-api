@@ -320,7 +320,7 @@ class AristonAPI:
     ) -> None:
         """Set Bsb zone temperature"""
         self._post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/{zone}/temperatures",
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/temperatures",
             {
                 "new": {
                     "comf": comfort,
@@ -691,7 +691,7 @@ class AristonAPI:
     ) -> None:
         """Async set Bsb temperature"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/dhwTemp",
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/dhwTemp",
             {
                 "new": {
                     "comf": comfort,
@@ -705,7 +705,7 @@ class AristonAPI:
     ) -> None:
         """Async set Bsb zone temperature"""
         await self._async_post(
-            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/{zone}/temperatures",
+            f"{ARISTON_API_URL}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/temperatures",
             {
                 "new": {
                     "comf": comfort,
