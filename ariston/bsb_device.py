@@ -270,12 +270,12 @@ class AristonBsbDevice(AristonDevice):
     def set_water_heater_operation_mode(self, operation_mode: str) -> None:
         """Set water heater operation mode"""
         self.api.set_bsb_mode(self.gw, BsbOperativeMode[operation_mode])
-        self.data[BsbDeviceProperties.DHW_MODE] = BsbOperativeMode[operation_mode].value
+        self.data[BsbDeviceProperties.DHW_MODE][PropertyType.VALUE] = BsbOperativeMode[operation_mode].value
 
     async def async_set_water_heater_operation_mode(self, operation_mode: str) -> None:
         """Async set water heater operation mode"""
         await self.api.async_set_bsb_mode(self.gw, BsbOperativeMode[operation_mode])
-        self.data[BsbDeviceProperties.DHW_MODE] = BsbOperativeMode[operation_mode].value
+        self.data[BsbDeviceProperties.DHW_MODE][PropertyType.VALUE] = BsbOperativeMode[operation_mode].value
 
     def set_water_heater_reduced_temperature(self, temperature: float):
         """Set water heater reduced temperature"""
@@ -298,16 +298,16 @@ class AristonBsbDevice(AristonDevice):
     def _set_water_heater_temperature(self, temperature: float, reduced: float):
         """Set water heater temperature"""
         self.api.set_bsb_temperature(self.gw, temperature, reduced)
-        self.data[BsbDeviceProperties.DHW_COMF_TEMP] = temperature
-        self.data[BsbDeviceProperties.DHW_REDU_TEMP] = reduced
+        self.data[BsbDeviceProperties.DHW_COMF_TEMP][PropertyType.VALUE] = temperature
+        self.data[BsbDeviceProperties.DHW_REDU_TEMP][PropertyType.VALUE] = reduced
 
     async def _async_set_water_heater_temperature(
         self, temperature: float, reduced: float
     ):
         """Async set water heater temperature"""
         await self.api.async_set_bsb_temperature(self.gw, temperature, reduced)
-        self.data[BsbDeviceProperties.DHW_COMF_TEMP] = temperature
-        self.data[BsbDeviceProperties.DHW_REDU_TEMP] = reduced
+        self.data[BsbDeviceProperties.DHW_COMF_TEMP][PropertyType.VALUE] = temperature
+        self.data[BsbDeviceProperties.DHW_REDU_TEMP][PropertyType.VALUE] = reduced
 
     def set_zone_mode(self, zone_mode: BsbZoneMode, zone: int):
         """Set zone mode"""
