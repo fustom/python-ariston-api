@@ -66,7 +66,11 @@ class AristonBsbDevice(AristonDevice):
 
     def get_zone_ch_comf_temp(self, zone: int) -> dict[str, Any]:
         """Get device zone central heating comfort temperature"""
-        return self.get_zone(zone).get(BsbDeviceProperties.DHW_COMF_TEMP, dict())
+        return self.get_zone(zone).get(BsbZoneProperties.CH_COMF_TEMP, dict())
+
+    def get_zone_ch_red_temp(self, zone: int) -> dict[str, Any]:
+        """Get device zone central heating reduced temperature"""
+        return self.get_zone(zone).get(BsbZoneProperties.CH_RED_TEMP, dict())
 
     def get_zone_mode(self, zone: int) -> BsbZoneMode:
         """Get zone mode on value"""
@@ -221,33 +225,49 @@ class AristonBsbDevice(AristonDevice):
             PropertyType.VALUE, None
         )
 
-    def get_measured_temp_unit(self, zone: int) -> str:
-        """Get zone measured temp unit"""
-        return "°C"
+    def get_comfort_temp_min(self, zone: int) -> int:
+        """Get zone comfort temp min"""
+        return self.get_zone_ch_comf_temp(zone).get(PropertyType.MIN, 15)
+
+    def get_comfort_temp_max(self, zone: int) -> int:
+        """Get zone comfort temp max"""
+        return self.get_zone_ch_comf_temp(zone).get(PropertyType.MAX, 24)
+
+    def get_comfort_temp_step(self, zone: int) -> int:
+        """Get zone comfort temp step"""
+        return self.get_zone_ch_comf_temp(zone).get(PropertyType.STEP, 0.5)
+
+    def get_comfort_temp_value(self, zone: int) -> int:
+        """Get zone comfort temp value"""
+        return self.get_zone_ch_comf_temp(zone).get(PropertyType.VALUE, 0)
+
+    def get_reduced_temp_min(self, zone: int) -> int:
+        """Get zone reduced temp min"""
+        return self.get_zone_ch_red_temp(zone).get(PropertyType.MIN, 10)
+
+    def get_reduced_temp_max(self, zone: int) -> int:
+        """Get zone reduced temp max"""
+        return self.get_zone_ch_red_temp(zone).get(PropertyType.MAX, 18)
+
+    def get_reduced_temp_step(self, zone: int) -> int:
+        """Get zone reduced temp step"""
+        return self.get_zone_ch_red_temp(zone).get(PropertyType.STEP, 0.5)
+
+    def get_reduced_temp_value(self, zone: int) -> int:
+        """Get zone reduced temp value"""
+        return self.get_zone_ch_red_temp(zone).get(PropertyType.VALUE, 0)
+
+    def get_measured_temp_value(self, zone: int) -> int:
+        """Get zone measured temp value"""
+        return self.get_zone(zone).get(BsbZoneProperties.ROOM_TEMP, 0)
 
     def get_measured_temp_decimals(self, zone: int) -> int:
         """Get zone measured temp decimals"""
         return 1
 
-    def get_comfort_temp_min(self, zone: int) -> int:
-        """Get zone comfort temp min"""
-        return self.get_zone_ch_comf_temp(zone).get(PropertyType.MIN, 7)
-
-    def get_comfort_temp_max(self, zone: int) -> int:
-        """Get zone comfort temp max"""
-        return self.get_zone_ch_comf_temp(zone).get(PropertyType.MAX, 35)
-
-    def get_comfort_temp_step(self, zone: int) -> int:
-        """Get zone comfort temp step"""
-        return self.get_zone_ch_comf_temp(zone).get(PropertyType.STEP, 1)
-
-    def get_measured_temp_value(self, zone: int) -> int:
-        """Get zone measured temp value"""
-        return self.get_zone(zone).get(BsbZoneProperties.ROOM_TEMP, None)
-
-    def get_comfort_temp_value(self, zone: int) -> int:
-        """Get zone comfort temp value"""
-        return self.get_zone_ch_comf_temp(zone).get(PropertyType.VALUE, None)
+    def get_measured_temp_unit(self, zone: int) -> str:
+        """Get zone measured temp unit"""
+        return "°C"
 
     def set_water_heater_temperature(self, temperature: float):
         """Set water heater temperature"""
@@ -326,3 +346,35 @@ class AristonBsbDevice(AristonDevice):
     def outside_temp_unit(self) -> str:
         """Get outside temperature unit"""
         return "°C"
+
+    def set_comfort_temp(self, temp: float, zone: int):
+        """Set central heating comfort temp"""
+        if len(self.data) == 0:
+            self.update_state()
+        reduced = self.get_reduced_temp_value(zone)
+        self.api.set_bsb_zone_temperature(self.gw, zone, temp, reduced)
+        self.get_zone_ch_comf_temp(zone)[PropertyType.VALUE] = temp
+
+    async def async_set_comfort_temp(self, temp: float, zone: int):
+        """Async set central heating comfort temp"""
+        if len(self.data) == 0:
+            await self.async_update_state()
+        reduced = self.get_reduced_temp_value(zone)
+        await self.api.async_set_bsb_zone_temperature(self.gw, zone, temp, reduced)
+        self.get_zone_ch_comf_temp(zone)[PropertyType.VALUE] = temp
+
+    def set_reduced_temp(self, temp: float, zone: int):
+        """Set central heating reduced temp"""
+        if len(self.data) == 0:
+            self.update_state()
+        comfort = self.get_comfort_temp_value(zone)
+        self.api.set_bsb_zone_temperature(self.gw, zone, comfort, temp)
+        self.get_zone_ch_red_temp(zone)[PropertyType.VALUE] = temp
+
+    async def async_set_reduced_temp(self, temp: float, zone: int):
+        """Async set central heating reduced temp"""
+        if len(self.data) == 0:
+            await self.async_update_state()
+        comfort = self.get_comfort_temp_value(zone)
+        await self.api.async_set_bsb_zone_temperature(self.gw, zone, comfort, temp)
+        self.get_zone_ch_red_temp(zone)[PropertyType.VALUE] = temp
