@@ -246,11 +246,6 @@ class AristonGalevoDevice(AristonDevice):
             PlantMode.COOLING.value or PlantMode.COOLING_ONLY.value
         ) in self.plant_mode_options
 
-    @staticmethod
-    def get_zone_number(zone_number: int) -> str:
-        """Get zone number"""
-        return f"{zone_number}"
-
     @property
     def holiday_expires_on(self) -> str:
         """Get holiday expires on"""
