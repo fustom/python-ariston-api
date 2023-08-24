@@ -11,26 +11,12 @@ from .const import (
     SystemType,
     VelisDeviceAttribute,
     WheType,
-    PlantMode,
-    ZoneMode,
-    ConsumptionProperties,
-    ConsumptionType,
-    CustomDeviceFeatures,
-    MedDeviceSettings,
-    VelisDeviceProperties,
-    EvoDeviceProperties,
-    NuosSplitProperties,
-    DeviceProperties,
-    DeviceFeatures,
-    ThermostatProperties,
 )
 from .lux_device import AristonLuxDevice
 from .evo_device import AristonEvoDevice
 from .galevo_device import AristonGalevoDevice
 from .lydos_hybrid_device import AristonLydosHybridDevice
-from .velis_device import AristonVelisDevice
 from .nuos_split_device import AristonNuosSplitDevice
-from .evo_lydos_device import AristonEvoLydosDevice
 from .device import AristonDevice
 
 _LOGGER = logging.getLogger(__name__)
