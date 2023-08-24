@@ -687,7 +687,7 @@ class AristonAPI:
         )
 
     async def async_set_bsb_temperature(
-        self, gw_id: str, comfort: float, reduced: float
+        self, gw_id: str, comfort: float, reduced: float, old_comfort: float, old_reduced: float
     ) -> None:
         """Async set Bsb temperature"""
         await self._async_post(
@@ -696,6 +696,10 @@ class AristonAPI:
                 "new": {
                     "comf": comfort,
                     "econ": reduced,
+                },
+                "old": {
+                    "comf": old_comfort,
+                    "econ": old_reduced,
                 }
             },
         )
