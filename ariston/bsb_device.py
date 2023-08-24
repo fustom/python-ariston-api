@@ -325,7 +325,7 @@ class AristonBsbDevice(AristonDevice):
         self, temperature: float, reduced: float
     ):
         """Async set water heater temperature"""
-        await self.api.async_set_bsb_temperature(self.gw, temperature, reduced)
+        await self.api.async_set_bsb_temperature(self.gw, temperature, reduced, self.water_heater_target_temperature, self.water_heater_reduced_temperature)
         self.data[BsbDeviceProperties.DHW_COMF_TEMP][PropertyType.VALUE] = temperature
         self.data[BsbDeviceProperties.DHW_REDU_TEMP][PropertyType.VALUE] = reduced
 
