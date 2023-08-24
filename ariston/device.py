@@ -321,17 +321,16 @@ class AristonDevice(ABC):
     def _set_energy_features(self):
         """Set energy features"""
         for consumption_type in ConsumptionType:
-            if consumption_type.name is not None:
-                if (
-                    self._get_consumption_sequence_last_value(
-                        consumption_type,
-                        ConsumptionTimeInterval.LAST_DAY,
-                    )
-                    is not None
-                ):
-                    self.custom_features[consumption_type.name] = True
-                else:
-                    self.custom_features[consumption_type.name] = False
+            if (
+                self._get_consumption_sequence_last_value(
+                    consumption_type,
+                    ConsumptionTimeInterval.LAST_DAY,
+                )
+                is not None
+            ):
+                self.custom_features[consumption_type.name] = True
+            else:
+                self.custom_features[consumption_type.name] = False
 
     def are_device_features_available(
         self,

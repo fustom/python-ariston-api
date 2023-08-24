@@ -58,7 +58,7 @@ class AristonBsbDevice(AristonDevice):
     @property
     def zones(self) -> dict[str, dict[str, Any]]:
         """Get device zones wrapper"""
-        return self.data.get(BsbDeviceProperties.ZONES, dict())
+        return self.data.get(BsbDeviceProperties.ZONES, dict[str, dict[str, Any]]())
 
     def get_zone(self, zone: int) -> dict[str, Any]:
         """Get device zone"""
@@ -66,17 +66,17 @@ class AristonBsbDevice(AristonDevice):
 
     def get_zone_ch_comf_temp(self, zone: int) -> dict[str, Any]:
         """Get device zone central heating comfort temperature"""
-        return self.get_zone(zone).get(BsbZoneProperties.CH_COMF_TEMP, dict())
+        return self.get_zone(zone).get(BsbZoneProperties.CH_COMF_TEMP, dict[str, Any]())
 
     def get_zone_ch_red_temp(self, zone: int) -> dict[str, Any]:
         """Get device zone central heating reduced temperature"""
-        return self.get_zone(zone).get(BsbZoneProperties.CH_RED_TEMP, dict())
+        return self.get_zone(zone).get(BsbZoneProperties.CH_RED_TEMP, dict[str, Any]())
 
     def get_zone_mode(self, zone: int) -> BsbZoneMode:
         """Get zone mode on value"""
         zone_mode = (
             self.get_zone(zone)
-            .get(BsbZoneProperties.MODE, dict())
+            .get(BsbZoneProperties.MODE, dict[str, Any]())
             .get(PropertyType.VALUE, None)
         )
 
@@ -89,7 +89,7 @@ class AristonBsbDevice(AristonDevice):
         """Get zone mode on options"""
         return (
             self.get_zone(zone)
-            .get(BsbZoneProperties.MODE, dict())
+            .get(BsbZoneProperties.MODE, dict[str, Any]())
             .get(PropertyType.ALLOWED_OPTIONS, None)
         )
 
@@ -145,56 +145,56 @@ class AristonBsbDevice(AristonDevice):
     @property
     def water_heater_minimum_temperature(self) -> float:
         """Method for getting water heater minimum temperature"""
-        return self.data.get(BsbDeviceProperties.DHW_COMF_TEMP, dict()).get(
+        return self.data.get(BsbDeviceProperties.DHW_COMF_TEMP, dict[str, Any]()).get(
             PropertyType.MIN, None
         )
 
     @property
     def water_heater_reduced_minimum_temperature(self) -> Optional[float]:
         """Get water heater reduced temperature"""
-        return self.data.get(BsbDeviceProperties.DHW_REDU_TEMP, dict()).get(
+        return self.data.get(BsbDeviceProperties.DHW_REDU_TEMP, dict[str, Any]()).get(
             PropertyType.MIN, None
         )
 
     @property
     def water_heater_target_temperature(self) -> Optional[float]:
         """Method for getting water heater target temperature"""
-        return self.data.get(BsbDeviceProperties.DHW_COMF_TEMP, dict()).get(
+        return self.data.get(BsbDeviceProperties.DHW_COMF_TEMP, dict[str, Any]()).get(
             PropertyType.VALUE, None
         )
 
     @property
     def water_heater_reduced_temperature(self) -> Optional[float]:
         """Get water heater reduced temperature"""
-        return self.data.get(BsbDeviceProperties.DHW_REDU_TEMP, dict()).get(
+        return self.data.get(BsbDeviceProperties.DHW_REDU_TEMP, dict[str, Any]()).get(
             PropertyType.VALUE, None
         )
 
     @property
     def water_heater_maximum_temperature(self) -> Optional[float]:
         """Method for getting water heater maximum temperature"""
-        return self.data.get(BsbDeviceProperties.DHW_COMF_TEMP, dict()).get(
+        return self.data.get(BsbDeviceProperties.DHW_COMF_TEMP, dict[str, Any]()).get(
             PropertyType.MAX, None
         )
 
     @property
     def water_heater_reduced_maximum_temperature(self) -> Optional[float]:
         """Get water heater reduced temperature"""
-        return self.data.get(BsbDeviceProperties.DHW_REDU_TEMP, dict()).get(
+        return self.data.get(BsbDeviceProperties.DHW_REDU_TEMP, dict[str, Any]()).get(
             PropertyType.MAX, None
         )
 
     @property
     def water_heater_temperature_step(self) -> int:
         """Method for getting water heater temperature step"""
-        return self.data.get(BsbDeviceProperties.DHW_COMF_TEMP, dict()).get(
+        return self.data.get(BsbDeviceProperties.DHW_COMF_TEMP, dict[str, Any]()).get(
             PropertyType.STEP, None
         )
 
     @property
     def water_heater_reduced_temperature_step(self) -> Optional[float]:
         """Get water heater reduced temperature"""
-        return self.data.get(BsbDeviceProperties.DHW_REDU_TEMP, dict()).get(
+        return self.data.get(BsbDeviceProperties.DHW_REDU_TEMP, dict[str, Any]()).get(
             PropertyType.STEP, None
         )
 
@@ -221,7 +221,7 @@ class AristonBsbDevice(AristonDevice):
     @property
     def water_heater_mode_value(self) -> Optional[int]:
         """Method for getting water heater mode value"""
-        return self.data.get(BsbDeviceProperties.DHW_MODE, dict()).get(
+        return self.data.get(BsbDeviceProperties.DHW_MODE, dict[str, Any]()).get(
             PropertyType.VALUE, None
         )
 
