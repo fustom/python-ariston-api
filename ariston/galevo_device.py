@@ -118,7 +118,7 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def zones(self) -> list[dict[str, Any]]:
         """Get device zones wrapper"""
-        return self.features.get(DeviceFeatures.ZONES, list())
+        return self.features.get(DeviceFeatures.ZONES, list[dict[str, Any]]())
 
     @property
     def zone_numbers(self) -> list[int]:
@@ -497,7 +497,7 @@ class AristonGalevoDevice(AristonDevice):
         return next(
             (
                 item.get(item_value)
-                for item in self.data.get("items", dict())
+                for item in self.data.get("items", list[dict[str, Any]]())
                 if item.get("id") == item_id
                 and item.get(PropertyType.ZONE) == zone_number
             ),
@@ -751,7 +751,7 @@ class AristonGalevoDevice(AristonDevice):
         value: float,
         zone_number: int = 0,
     ):
-        for item in self.data.get("items", dict()):
+        for item in self.data.get("items", list[dict[str, Any]]()):
             if item.get("id") == item_id and item.get(PropertyType.ZONE) == zone_number:
                 item[PropertyType.VALUE] = value
                 break
@@ -801,7 +801,7 @@ class AristonGalevoDevice(AristonDevice):
         )
 
     def _set_holiday(self, holiday_end_date: Optional[str]):
-        for item in self.data.get("items", dict()):
+        for item in self.data.get("items", list[dict[str, Any]]()):
             if item.get("id") == DeviceProperties.HOLIDAY:
                 item[PropertyType.VALUE] = False if holiday_end_date is None else True
                 item[PropertyType.EXPIRES_ON] = (
