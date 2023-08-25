@@ -1,5 +1,5 @@
 """Constants for ariston module"""
-from enum import Enum, unique
+from enum import Enum, IntEnum, unique
 from typing import Final
 
 ARISTON_API_URL: Final[str] = "https://www.ariston-net.remotethermo.com/api/v2/"
@@ -90,7 +90,7 @@ class Weather(Enum):
 
 
 @unique
-class GasEnergyUnit(Enum):
+class GasEnergyUnit(IntEnum):
     """Gas energy unit enum"""
 
     KWH = 0
@@ -102,7 +102,7 @@ class GasEnergyUnit(Enum):
 
 
 @unique
-class GasType(Enum):
+class GasType(IntEnum):
     """Gas type enu,"""
 
     NATURAL_GAS = 0
@@ -113,7 +113,7 @@ class GasType(Enum):
 
 
 @unique
-class Currency(Enum):
+class Currency(IntEnum):
     """Currency enum"""
 
     ARS = 1

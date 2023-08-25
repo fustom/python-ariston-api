@@ -507,17 +507,17 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def elect_cost(self) -> Optional[float]:
         """Get electric consumption cost"""
-        return self.consumptions_settings.get(ConsumptionProperties.ELEC_COST)
+        return self.consumptions_settings.get(ConsumptionProperties.ELEC_COST, None)
 
     @property
     def gas_cost(self) -> Optional[float]:
         """Get gas consumption cost"""
-        return self.consumptions_settings.get(ConsumptionProperties.GAS_COST)
+        return self.consumptions_settings.get(ConsumptionProperties.GAS_COST, None)
 
     @property
     def gas_type(self) -> Optional[str]:
         """Get gas type"""
-        gas_type = self.consumptions_settings.get(ConsumptionProperties.GAS_TYPE)
+        gas_type = self.consumptions_settings.get(ConsumptionProperties.GAS_TYPE, None)
         if gas_type in list(GasType):
             return GasType(gas_type).name
         return None
@@ -542,11 +542,9 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def currency(self) -> Optional[str]:
         """Get gas type"""
-        currency = self.consumptions_settings.get(ConsumptionProperties.CURRENCY)
+        currency = self.consumptions_settings.get(ConsumptionProperties.CURRENCY, None)
         if currency in list(Currency):
-            return Currency(
-                self.consumptions_settings.get(ConsumptionProperties.CURRENCY)
-            ).name
+            return Currency(currency).name
         return None
 
     @staticmethod
@@ -569,11 +567,9 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def gas_energy_unit(self) -> Optional[str]:
         """Get gas energy unit"""
-        gas_energy_unit = self.consumptions_settings.get(ConsumptionProperties.GAS_ENERGY_UNIT)
+        gas_energy_unit = self.consumptions_settings.get(ConsumptionProperties.GAS_ENERGY_UNIT, None)
         if gas_energy_unit in list(GasEnergyUnit):
-            return GasEnergyUnit(
-                self.consumptions_settings.get(ConsumptionProperties.GAS_ENERGY_UNIT)
-            ).name
+            return GasEnergyUnit(gas_energy_unit).name
         return None
 
     @staticmethod
