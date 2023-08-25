@@ -303,7 +303,7 @@ class AristonAPI:
             },
         )
 
-    def set_bsb_temperature(self, gw_id: str, comfort: float, reduced: float) -> None:
+    def set_bsb_temperature(self, gw_id: str, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float]) -> None:
         """Set Bsb temperature"""
         self._post(
             f"{ARISTON_API_URL}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/dhwTemp",
@@ -311,6 +311,10 @@ class AristonAPI:
                 "new": {
                     "comf": comfort,
                     "econ": reduced,
+                },
+                "old": {
+                    "comf": old_comfort,
+                    "econ": old_reduced,
                 }
             },
         )
@@ -687,7 +691,7 @@ class AristonAPI:
         )
 
     async def async_set_bsb_temperature(
-        self, gw_id: str, comfort: float, reduced: float, old_comfort: float, old_reduced: float
+        self, gw_id: str, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float]
     ) -> None:
         """Async set Bsb temperature"""
         await self._async_post(

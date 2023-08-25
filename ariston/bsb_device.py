@@ -317,7 +317,7 @@ class AristonBsbDevice(AristonDevice):
 
     def _set_water_heater_temperature(self, temperature: float, reduced: float):
         """Set water heater temperature"""
-        self.api.set_bsb_temperature(self.gw, temperature, reduced)
+        self.api.set_bsb_temperature(self.gw, temperature, reduced, self.water_heater_target_temperature, self.water_heater_reduced_temperature)
         self.data[BsbDeviceProperties.DHW_COMF_TEMP][PropertyType.VALUE] = temperature
         self.data[BsbDeviceProperties.DHW_REDU_TEMP][PropertyType.VALUE] = reduced
 
