@@ -347,6 +347,13 @@ class AristonAPI:
             eco_mode,
         )
 
+    def set_lux_power_option(self, gw_id: str, power_option: bool) -> None:
+        """Set Velis Lux2 power option"""
+        self._post(
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/switchPowerOption",
+            power_option,
+        )
+
     def set_velis_power(self, plant_data: PlantData, gw_id: str, power: bool) -> None:
         """Set Velis power"""
         self._post(
@@ -734,6 +741,13 @@ class AristonAPI:
         await self._async_post(
             f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/switchEco",
             eco_mode,
+        )
+
+    async def async_set_lux_power_option(self, gw_id: str, power_option: bool) -> None:
+        """Set Velis Lux2 power option"""
+        await self._async_post(
+            f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Med.value}/{gw_id}/switchPowerOption",
+            power_option,
         )
 
     async def async_set_velis_power(
