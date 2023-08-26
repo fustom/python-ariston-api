@@ -105,6 +105,11 @@ def _get_device(
                 api,
                 device,
             )
+        if whe_type == WheType.Andris2.value:
+            return AristonEvoDevice(
+                api,
+                device,
+            )
         _LOGGER.exception("Unsupported whe type %s", whe_type)
         return None
 

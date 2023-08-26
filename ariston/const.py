@@ -236,6 +236,7 @@ class WheType(Enum):
     Evo = 1
     LydosHybrid = 2
     NuosSplit = 4
+    Andris2 = 5
     Evo2 = 6
     Lux = 8
 
