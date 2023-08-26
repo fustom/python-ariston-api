@@ -3,8 +3,6 @@ import asyncio
 import logging
 from typing import Any, Optional
 
-from ariston.bsb_device import AristonBsbDevice
-
 from .ariston_api import AristonAPI, ConnectionException
 from .const import (
     DeviceAttribute,
@@ -12,7 +10,9 @@ from .const import (
     VelisDeviceAttribute,
     WheType,
 )
+from .bsb_device import AristonBsbDevice
 from .lux_device import AristonLuxDevice
+from .lux2_device import AristonLux2Device
 from .evo_device import AristonEvoDevice
 from .galevo_device import AristonGalevoDevice
 from .lydos_hybrid_device import AristonLydosHybridDevice
@@ -107,6 +107,11 @@ def _get_device(
             )
         if whe_type == WheType.Andris2.value:
             return AristonEvoDevice(
+                api,
+                device,
+            )
+        if whe_type == WheType.Lux2.value:
+            return AristonLux2Device(
                 api,
                 device,
             )

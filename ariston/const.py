@@ -238,6 +238,7 @@ class WheType(Enum):
     NuosSplit = 4
     Andris2 = 5
     Evo2 = 6
+    Lux2 = 7
     Lux = 8
 
 
