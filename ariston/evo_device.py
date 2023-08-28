@@ -64,6 +64,11 @@ class AristonEvoDevice(AristonEvoLydosDevice):
         return time.hour * 60 + time.minute
 
     @property
+    def water_heater_power_option_value(self) -> Optional[bool]:
+        """Get water heater power option value"""
+        return self.data.get(EvoDeviceProperties.PWR_OPT, None)
+
+    @property
     def water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
         """Get water heater maximum setpoint temperature minimum"""
         return self.plant_settings.get(
