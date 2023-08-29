@@ -40,6 +40,7 @@ class AristonDevice(ABC):
             dt.datetime.utcfromtimestamp(0).replace(tzinfo=dt.timezone.utc)
         )
         self.gw: str = self.attributes.get(DeviceAttribute.GW, "")
+        self.bus_errors_list: list[dict[str, Any]] = []
 
     @property
     @abstractmethod
@@ -106,6 +107,11 @@ class AristonDevice(ABC):
     def firmware_version(self) -> Optional[str]:
         """Get device firmware version wrapper"""
         return self.attributes.get(GalevoDeviceAttribute.FW_VER, None)
+    
+    @property
+    def bus_errors(self) -> list[dict[str, Any]]:
+        """Get bus errors list wrapper"""
+        return self.bus_errors_list
 
     def get_features(self) -> None:
         """Get device features wrapper"""
@@ -322,6 +328,14 @@ class AristonDevice(ABC):
         old_consumptions_sequences = self.consumptions_sequences
         await self._async_get_consumptions_sequences()
         self._update_energy(old_consumptions_sequences)
+
+    def get_bus_errors(self) -> None:
+        """Get bus errors from the cloud"""
+        self.bus_errors_list = self.api.get_bus_errors(self.gw)
+
+    async def async_get_bus_errors(self) -> None:
+        """Async get bus errors from the cloud"""
+        self.bus_errors_list = await self.api.async_get_bus_errors(self.gw)
 
     def _set_energy_features(self):
         """Set energy features"""
