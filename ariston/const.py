@@ -14,6 +14,7 @@ ARISTON_BSB_ZONES: Final[str] = "bsbZones"
 ARISTON_PLANT_DATA: Final[str] = "plantData"
 ARISTON_REPORTS: Final[str] = "reports"
 ARISTON_TIME_PROGS: Final[str] = "timeProgs"
+ARISTON_BUS_ERRORS: Final[str] = "busErrors"
 
 
 @unique
@@ -566,3 +567,16 @@ class PropertyType:
     ZONE: Final[str] = "zone"
     EXPIRES_ON: Final[str] = "expiresOn"
     ALLOWED_OPTIONS: Final[str] = "allowedOptions"
+
+class BusErrorsProperties:
+    """Constants for bus errors properties"""
+    GW: Final[str] = "gw"
+    TIMESTAMP: Final[str] = "timestamp"
+    FAULT: Final[str] = "fault"
+    MULT: Final[str] = "mult"
+    CODE: Final[str] = "code"
+    PRI: Final[str] = "pri"
+    ERR_DEX: Final[str] = "errDex"
+    RES: Final[str] = "res"
+    BLK: Final[str] = "blk"
+    

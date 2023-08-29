@@ -10,6 +10,7 @@ import requests
 from .const import (
     ARISTON_API_URL,
     ARISTON_BSB_ZONES,
+    ARISTON_BUS_ERRORS,
     ARISTON_DATA_ITEMS,
     ARISTON_LITE,
     ARISTON_LOGIN,
@@ -398,6 +399,13 @@ class AristonAPI:
                 "new": holiday_end_date,
             },
         )
+
+    def get_bus_errors(self, gw_id: str) -> list[Any]:
+        """Get bus errors"""
+        bus_errors = self._get(f"{ARISTON_API_URL}{ARISTON_BUS_ERRORS}?gatewayId={gw_id}&blockingOnly=False&culture=en-US")
+        if bus_errors is not None:
+            return list(bus_errors)
+        return []
 
     def __request(
         self,
@@ -794,6 +802,13 @@ class AristonAPI:
                 "new": holiday_end_date,
             },
         )
+
+    async def async_get_bus_errors(self, gw_id: str) -> list[Any]:
+        """Async get bus errors"""
+        bus_errors = await self._async_get(f"{ARISTON_API_URL}{ARISTON_BUS_ERRORS}?gatewayId={gw_id}&blockingOnly=False&culture=en-US")
+        if bus_errors is not None:
+            return list(bus_errors)
+        return []
 
     async def __async_request(
         self,
