@@ -73,6 +73,11 @@ class AristonDevice(ABC):
         )
 
     @property
+    def whe_model_type(self) -> int:
+        """Get device whe model type wrapper"""
+        return self.attributes.get(VelisDeviceAttribute.WHE_MODEL_TYPE, 0)
+
+    @property
     def gateway(self) -> str:
         """Get device gateway wrapper"""
         return self.gw
