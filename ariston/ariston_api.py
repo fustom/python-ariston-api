@@ -292,7 +292,7 @@ class AristonAPI:
             },
         )
 
-    def set_nuos_temperature(self, gw_id: str, comfort: float, reduced: float) -> None:
+    def set_nuos_temperature(self, gw_id: str, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float]) -> None:
         """Set Nuos temperature"""
         self._post(
             f"{ARISTON_API_URL}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/temperatures",
@@ -300,6 +300,10 @@ class AristonAPI:
                 "new": {
                     "comfort": comfort,
                     "reduced": reduced,
+                },
+                "old": {
+                    "comfort": old_comfort,
+                    "reduced": old_reduced,
                 }
             },
         )
@@ -692,7 +696,7 @@ class AristonAPI:
         )
 
     async def async_set_nuos_temperature(
-        self, gw_id: str, comfort: float, reduced: float
+        self, gw_id: str, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float]
     ) -> None:
         """Async set Velis Lydos temperature"""
         await self._async_post(
@@ -701,6 +705,10 @@ class AristonAPI:
                 "new": {
                     "comfort": comfort,
                     "reduced": reduced,
+                },
+                "old": {
+                    "comfort": old_comfort,
+                    "reduced": old_reduced,
                 }
             },
         )
