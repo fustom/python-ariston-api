@@ -106,7 +106,7 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     def water_heater_boost(self) -> Optional[bool]:
         """Get water heater boost"""
         return self.data.get(NuosSplitProperties.BOOST_ON, None)
-    
+
     @property
     def water_heater_mode_value(self) -> Optional[int]:
         """Get water heater mode value"""
