@@ -324,6 +324,7 @@ class ZoneAttribute:
     NAME: Final[str] = "name"
     ROOM_SENS: Final[str] = "roomSens"
     GEOFENCE_DEROGA: Final[str] = "geofenceDeroga"
+    IS_HIDDEN: Final[str] = "isHidden"
 
 
 class CustomDeviceFeatures:
@@ -523,6 +524,13 @@ class DeviceProperties:
     ANTILEGIONELLA_ON_OFF: Final[str] = "AntilegionellaOnOff"
     ANTILEGIONELLA_TEMP: Final[str] = "AntilegionellaTemp"
     ANTILEGIONELLA_FREQ: Final[str] = "AntilegionellaFreq"
+    HYBRID_MODE: Final[str] = "HybridMode"
+    BUFFER_CONTROL_MODE: Final[str] = "BufferControlMode"
+    BUFFER_TIME_PROG_COMFORT_HEATING_TEMP: Final[str] = "BufferTimeProgComfortHeatingTemp"
+    BUFFER_TIME_PROG_ECONOMY_HEATING_TEMP: Final[str] = "BufferTimeProgEconomyHeatingTemp"
+    BUFFER_TIME_PROG_COMFORT_COOLING_TEMP: Final[str] = "BufferTimeProgComfortCoolingTemp"
+    BUFFER_TIME_PROG_ECONOMY_COOLING_TEMP: Final[str] = "BufferTimeProgEconomyCoolingTemp"
+    IS_QUITE: Final[str] = "IsQuite"
 
 
 class ThermostatProperties:
@@ -541,6 +549,12 @@ class ThermostatProperties:
     HEATING_FLOW_OFFSET: Final[str] = "HeatingFlowOffset"
     COOLING_FLOW_TEMP: Final[str] = "CoolingFlowTemp"
     COOLING_FLOW_OFFSET: Final[str] = "CoolingFlowOffset"
+    ZONE_NAME: Final[str] = "ZoneName"
+    VIRT_TEMP_SETPOINT_HEAT: Final[str] = "VirtTempSetpointHeat"
+    VIRT_TEMP_SETPOINT_COOL: Final[str] = "VirtTempSetpointCool"
+    VIRT_COMFORT_TEMP: Final[str] = "VirtComfortTemp"
+    VIRT_REDUCED_TEMP: Final[str] = "VirtReducedTemp"
+    ZONE_VIRT_TEMP_OFFSET_COOL: Final[str] = "VirtTempOffsetCool"
 
 
 class ConsumptionProperties:
@@ -579,4 +593,3 @@ class BusErrorsProperties:
     ERR_DEX: Final[str] = "errDex"
     RES: Final[str] = "res"
     BLK: Final[str] = "blk"
-    
