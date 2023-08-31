@@ -76,6 +76,8 @@ class AristonGalevoDevice(AristonDevice):
                 storage_temp is not None and storage_temp != max_storage_temp
             )
 
+        self.custom_features[DeviceProperties.CH_FLOW_TEMP] = self.ch_flow_temp_value is not None
+
     def update_state(self) -> None:
         """Update the device states from the cloud"""
         if len(self.features) == 0:
@@ -309,7 +311,7 @@ class AristonGalevoDevice(AristonDevice):
         )
 
     @property
-    def ch_flow_temp_value(self) -> str:
+    def ch_flow_temp_value(self) -> Optional[str]:
         """Get central heating flow temperature value"""
         return self._get_item_by_id(DeviceProperties.CH_FLOW_TEMP, PropertyType.VALUE)
 
