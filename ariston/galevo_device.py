@@ -273,6 +273,32 @@ class AristonGalevoDevice(AristonDevice):
         )
 
     @property
+    def hybrid_mode(self) -> str:
+        """Get hybrid mode value"""
+        return self.hybrid_mode_opt_texts[self.hybrid_mode_options.index(self.hybrid_mode_value)]
+
+    @property
+    def hybrid_mode_value(self) -> str:
+        """Get hybrid mode value"""
+        return self._get_item_by_id(
+            DeviceProperties.HYBRID_MODE, PropertyType.VALUE
+        )
+
+    @property
+    def hybrid_mode_options(self) -> str:
+        """Get hybrid mode options"""
+        return self._get_item_by_id(
+            DeviceProperties.HYBRID_MODE, PropertyType.OPTIONS
+        )
+
+    @property
+    def hybrid_mode_opt_texts(self) -> str:
+        """Get hybrid mode opt texts"""
+        return self._get_item_by_id(
+            DeviceProperties.HYBRID_MODE, PropertyType.OPT_TEXTS
+        )
+
+    @property
     def ch_flow_setpoint_temp_value(self) -> str:
         """Get central heating flow setpoint temperature value"""
         return self._get_item_by_id(
@@ -313,7 +339,7 @@ class AristonGalevoDevice(AristonDevice):
 
     @property
     def is_heating_pump_on_value(self) -> bool:
-        """Get is heating pump on value"""                                           
+        """Get is heating pump on value"""
         return self._get_item_by_id(DeviceProperties.IS_HEATING_PUMP_ON, PropertyType.VALUE)
 
     @property
@@ -693,6 +719,24 @@ class AristonGalevoDevice(AristonDevice):
         """Async set automatic thermoregulation"""
         await self.async_set_item_by_id(
             DeviceProperties.AUTOMATIC_THERMOREGULATION, 1.0 if auto_thermo else 0.0
+        )
+
+    def set_hybrid_mode(self, hybrid_mode: str):
+        """Set hybrid mode"""
+        self.set_item_by_id(
+            DeviceProperties.HYBRID_MODE,
+            self._get_item_by_id(
+                DeviceProperties.HYBRID_MODE, PropertyType.OPT_TEXTS
+            ).index(hybrid_mode),
+        )
+
+    async def async_set_hybrid_mode(self, hybrid_mode: str):
+        """Async set hybrid mode"""
+        await self.async_set_item_by_id(
+            DeviceProperties.HYBRID_MODE,
+            self._get_item_by_id(
+                DeviceProperties.HYBRID_MODE, PropertyType.OPT_TEXTS
+            ).index(hybrid_mode),
         )
 
     def set_plant_mode(self, plant_mode: PlantMode):
