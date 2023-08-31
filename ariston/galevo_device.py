@@ -69,8 +69,11 @@ class AristonGalevoDevice(AristonDevice):
             storage_temp = self._get_item_by_id(
                 DeviceProperties.DHW_STORAGE_TEMPERATURE, PropertyType.VALUE
             )
+            max_storage_temp = self._get_item_by_id(
+                DeviceProperties.DHW_STORAGE_TEMPERATURE, PropertyType.MAX
+            )
             self.custom_features[DeviceProperties.DHW_STORAGE_TEMPERATURE] = (
-                storage_temp is not None
+                storage_temp is not None and storage_temp != max_storage_temp
             )
 
     def update_state(self) -> None:
