@@ -77,6 +77,7 @@ class AristonGalevoDevice(AristonDevice):
             )
 
         self.custom_features[DeviceProperties.CH_FLOW_TEMP] = self.ch_flow_temp_value is not None
+        self.custom_features[DeviceProperties.IS_QUITE] = self.is_quite_value is not None
 
     def update_state(self) -> None:
         """Update the device states from the cloud"""
@@ -301,6 +302,13 @@ class AristonGalevoDevice(AristonDevice):
         """Get hybrid mode opt texts"""
         return self._get_item_by_id(
             DeviceProperties.HYBRID_MODE, PropertyType.OPT_TEXTS
+        )
+
+    @property
+    def is_quite_value(self) -> Optional[str]:
+        """Get is quite value"""
+        return self._get_item_by_id(
+            DeviceProperties.IS_QUITE, PropertyType.VALUE
         )
 
     @property
@@ -742,6 +750,18 @@ class AristonGalevoDevice(AristonDevice):
             self._get_item_by_id(
                 DeviceProperties.HYBRID_MODE, PropertyType.OPT_TEXTS
             ).index(hybrid_mode),
+        )
+
+    def set_is_quite(self, is_quite: bool):
+        """Set is quite"""
+        self.set_item_by_id(
+            DeviceProperties.IS_QUITE, 1.0 if is_quite else 0.0
+        )
+
+    async def async_set_is_quite(self, is_quite: bool):
+        """Async set is quite"""
+        await self.async_set_item_by_id(
+            DeviceProperties.IS_QUITE, 1.0 if is_quite else 0.0
         )
 
     def set_plant_mode(self, plant_mode: PlantMode):
