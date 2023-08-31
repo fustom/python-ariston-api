@@ -305,6 +305,32 @@ class AristonGalevoDevice(AristonDevice):
         )
 
     @property
+    def buffer_control_mode(self) -> str:
+        """Get buffer control mode"""
+        return self.buffer_control_mode_opt_texts[self.buffer_control_mode_options.index(self.buffer_control_mode_value)]
+
+    @property
+    def buffer_control_mode_value(self) -> Optional[str]:
+        """Get buffer control mode value"""
+        return self._get_item_by_id(
+            DeviceProperties.BUFFER_CONTROL_MODE, PropertyType.VALUE
+        )
+
+    @property
+    def buffer_control_mode_options(self) -> str:
+        """Get buffer control mode options"""
+        return self._get_item_by_id(
+            DeviceProperties.BUFFER_CONTROL_MODE, PropertyType.OPTIONS
+        )
+
+    @property
+    def buffer_control_mode_opt_texts(self) -> str:
+        """Get buffer control mode opt texts"""
+        return self._get_item_by_id(
+            DeviceProperties.BUFFER_CONTROL_MODE, PropertyType.OPT_TEXTS
+        )
+
+    @property
     def is_quite_value(self) -> Optional[str]:
         """Get is quite value"""
         return self._get_item_by_id(
@@ -750,6 +776,24 @@ class AristonGalevoDevice(AristonDevice):
             self._get_item_by_id(
                 DeviceProperties.HYBRID_MODE, PropertyType.OPT_TEXTS
             ).index(hybrid_mode),
+        )
+
+    def set_buffer_control_mode(self, buffer_control_mode: str):
+        """Set buffer control mode"""
+        self.set_item_by_id(
+            DeviceProperties.BUFFER_CONTROL_MODE,
+            self._get_item_by_id(
+                DeviceProperties.BUFFER_CONTROL_MODE, PropertyType.OPT_TEXTS
+            ).index(buffer_control_mode),
+        )
+
+    async def async_set_buffer_control_mode(self, buffer_control_mode: str):
+        """Async set buffer control mode"""
+        await self.async_set_item_by_id(
+            DeviceProperties.BUFFER_CONTROL_MODE,
+            self._get_item_by_id(
+                DeviceProperties.BUFFER_CONTROL_MODE, PropertyType.OPT_TEXTS
+            ).index(buffer_control_mode),
         )
 
     def set_is_quite(self, is_quite: bool):
