@@ -12,7 +12,6 @@ from .const import (
     ConsumptionTimeInterval
 )
 
-logging.basicConfig(level=logging.INFO)
 _LOGGER = logging.getLogger(__name__)
 
 class AristonNimbusDevice(AristonGalevoDevice):
