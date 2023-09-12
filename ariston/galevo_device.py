@@ -9,6 +9,8 @@ from typing import Any, Optional
 from .ariston_api import AristonAPI
 from .const import (
     ConsumptionProperties,
+    ConsumptionTimeInterval,
+    ConsumptionType,
     Currency,
     CustomDeviceFeatures,
     DeviceFeatures,
@@ -45,7 +47,7 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def consumption_type(self) -> str:
         """String to get consumption type"""
-        return f"Ch{'%2CDhw' if self.custom_features.get(CustomDeviceFeatures.HAS_DHW) else ''}"
+        return f"Ch{'%2CDhw' if self.has_dhw else ''}{'%2CCooling' if self.hpmp_sys else ''}"
 
     @property
     def plant_mode_supported(self) -> bool:
@@ -310,7 +312,7 @@ class AristonGalevoDevice(AristonDevice):
         return self.buffer_control_mode_opt_texts[self.buffer_control_mode_options.index(self.buffer_control_mode_value)]
 
     @property
-    def buffer_control_mode_value(self) -> Optional[str]:
+    def buffer_control_mode_value(self) -> str:
         """Get buffer control mode value"""
         return self._get_item_by_id(
             DeviceProperties.BUFFER_CONTROL_MODE, PropertyType.VALUE
@@ -671,6 +673,14 @@ class AristonGalevoDevice(AristonDevice):
         return energy_account_last_month[0].get("elect", None)
 
     @property
+    def electricity_consumption_for_cooling_last_month(self) -> Optional[int]:
+        """Get electricity consumption for cooling last month"""
+        energy_account_last_month = self.energy_account.get("LastMonth", None)
+        if not energy_account_last_month:
+            return None
+        return energy_account_last_month[0].get("cool", None)
+
+    @property
     def gas_consumption_for_water_last_month(self) -> Optional[int]:
         """Get gas consumption for water last month"""
         energy_account_last_month = self.energy_account.get("LastMonth", None)
@@ -930,6 +940,21 @@ class AristonGalevoDevice(AristonDevice):
         await self.api.async_set_holiday(self.gw, holiday_end_date)
         self._set_holiday(holiday_end_date)
 
+    def _calc_energy_account(self) -> dict[str, Any]:
+        """Calculate the energy account"""
+        calculated_heating_energy = 0
+        calculated_cooling_energy = 0
+
+        for sequence in self.consumptions_sequences:
+            if sequence['p'] == ConsumptionTimeInterval.LAST_MONTH.value:
+                if sequence['k'] == ConsumptionType.CENTRAL_COOLING_TOTAL_ENERGY.value:
+                    calculated_cooling_energy = sum(sequence['v'])
+
+                elif sequence['k'] == ConsumptionType.CENTRAL_HEATING_TOTAL_ENERGY.value:
+                    calculated_heating_energy = sum(sequence['v'])
+
+        return {'LastMonth': [{'elect': calculated_heating_energy},{'cool': calculated_cooling_energy}] }
+
     def update_energy(self) -> None:
         """Update the device energy settings from the cloud"""
         super().update_energy()
@@ -938,6 +963,9 @@ class AristonGalevoDevice(AristonDevice):
         self.consumptions_settings = self.api.get_consumptions_settings(self.gw)
         # Last month consumption in kwh
         self.energy_account = self.api.get_energy_account(self.gw)
+
+        if not self.energy_account:
+            self.energy_account = self._calc_energy_account()
 
     async def async_update_energy(self) -> None:
         """Async update the device energy settings from the cloud"""
@@ -948,3 +976,6 @@ class AristonGalevoDevice(AristonDevice):
             # Last month consumption in kwh
             self.api.async_get_energy_account(self.gw),
         )
+
+        if not self.energy_account:
+            self.energy_account = self._calc_energy_account()

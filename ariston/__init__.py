@@ -17,7 +17,6 @@ from .evo_device import AristonEvoDevice
 from .galevo_device import AristonGalevoDevice
 from .lydos_hybrid_device import AristonLydosHybridDevice
 from .nuos_split_device import AristonNuosSplitDevice
-from .nimbus_device import AristonNimbusDevice
 from .device import AristonDevice
 
 _LOGGER = logging.getLogger(__name__)
@@ -78,20 +77,12 @@ def _get_device(
 
     system_type = device.get(DeviceAttribute.SYS)
     if system_type == SystemType.GALEVO.value:
-        if DeviceAttribute.HPMP_SYS in device and device.get(DeviceAttribute.HPMP_SYS):
-            return AristonNimbusDevice(
-                api,
-                device,
-                is_metric,
-                language_tag
-            )
-        else:
-            return AristonGalevoDevice(
-                api,
-                device,
-                is_metric,
-                language_tag,
-            )
+        return AristonGalevoDevice(
+            api,
+            device,
+            is_metric,
+            language_tag,
+        )
     if system_type == SystemType.VELIS.value:
         whe_type = device.get(VelisDeviceAttribute.WHE_TYPE)
         if whe_type == WheType.LydosHybrid.value:
