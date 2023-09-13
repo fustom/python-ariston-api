@@ -678,7 +678,7 @@ class AristonGalevoDevice(AristonDevice):
         energy_account_last_month = self.energy_account.get("LastMonth", None)
         if not energy_account_last_month:
             return None
-        return energy_account_last_month[0].get("cool", None)
+        return energy_account_last_month[1].get("cool", None)
 
     @property
     def gas_consumption_for_water_last_month(self) -> Optional[int]:
