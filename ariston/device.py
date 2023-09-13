@@ -364,7 +364,7 @@ class AristonDevice(ABC):
 
     def are_device_features_available(
         self,
-        device_features: Optional[list[DeviceFeatures]],
+        device_features: Optional[list[DeviceFeatures or CustomDeviceFeatures or DeviceAttribute]],
         system_types: Optional[list[SystemType]],
         whe_types: Optional[list[WheType]],
     ) -> bool:
@@ -380,6 +380,7 @@ class AristonDevice(ABC):
                 if (
                     self.features.get(str(device_feature)) is not True
                     and self.custom_features.get(str(device_feature)) is not True
+                    and self.attributes.get(str(device_feature)) is not True
                 ):
                     return False
 
