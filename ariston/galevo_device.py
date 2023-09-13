@@ -678,7 +678,7 @@ class AristonGalevoDevice(AristonDevice):
         energy_account_last_month = self.energy_account.get("LastMonth", None)
         if not energy_account_last_month:
             return None
-        return energy_account_last_month[1].get("cool", None)
+        return energy_account_last_month[0].get("cool", None)
 
     @property
     def gas_consumption_for_water_last_month(self) -> Optional[int]:
@@ -953,7 +953,7 @@ class AristonGalevoDevice(AristonDevice):
                 elif sequence['k'] == ConsumptionType.CENTRAL_HEATING_TOTAL_ENERGY.value:
                     calculated_heating_energy = sum(sequence['v'])
 
-        return {'LastMonth': [{'elect': calculated_heating_energy},{'cool': calculated_cooling_energy}] }
+        return {'LastMonth': [{'elect': calculated_heating_energy,'cool': calculated_cooling_energy}] }
 
     def update_energy(self) -> None:
         """Update the device energy settings from the cloud"""
