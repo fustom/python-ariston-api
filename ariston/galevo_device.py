@@ -964,7 +964,7 @@ class AristonGalevoDevice(AristonDevice):
         # Last month consumption in kwh
         self.energy_account = self.api.get_energy_account(self.gw)
 
-        if not self.energy_account:
+        if not self.energy_account.get('LastMonth'):
             self.energy_account = self._calc_energy_account()
 
     async def async_update_energy(self) -> None:
@@ -977,5 +977,5 @@ class AristonGalevoDevice(AristonDevice):
             self.api.async_get_energy_account(self.gw),
         )
 
-        if not self.energy_account:
+        if not self.energy_account.get('LastMonth'):
             self.energy_account = self._calc_energy_account()
