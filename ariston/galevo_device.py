@@ -953,7 +953,7 @@ class AristonGalevoDevice(AristonDevice):
                 elif sequence['k'] == ConsumptionType.CENTRAL_HEATING_TOTAL_ENERGY.value:
                     calculated_heating_energy = sum(sequence['v'])
 
-        return {'LastMonth': [{'elect': calculated_heating_energy},{'cool': calculated_cooling_energy}] }
+        return {'LastMonth': [{'elect': calculated_heating_energy,'cool': calculated_cooling_energy}] }
 
     def update_energy(self) -> None:
         """Update the device energy settings from the cloud"""
