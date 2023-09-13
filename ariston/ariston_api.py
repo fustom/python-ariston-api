@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Optional
 
 import aiohttp
+import asyncio
 import requests
 
 from .const import (
@@ -440,6 +442,10 @@ class AristonAPI:
                 raise Exception("Invalid token")
             if response.status_code == 404:
                 return None
+            if response.status_code == 500:
+                if not is_retry:
+                    time.sleep(1)
+                    return self.__request(method, path, params, body, True)
             raise Exception(response.status_code)
 
         if len(response.content) > 0:
@@ -852,6 +858,12 @@ class AristonAPI:
                     raise Exception("Invalid token")
                 if response.status == 404:
                     return None
+                if response.status == 500:
+                    if not is_retry:
+                        await asyncio.sleep(1)
+                        return await self.__async_request(
+                            method, path, params, body, True
+                        )
                 raise Exception(response.status)
 
             if response.content_length and response.content_length > 0:
