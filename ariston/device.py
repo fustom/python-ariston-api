@@ -10,6 +10,7 @@ from .ariston_api import AristonAPI
 from .const import (
     ConsumptionTimeInterval,
     ConsumptionType,
+    CustomDeviceFeatures,
     DeviceFeatures,
     DeviceAttribute,
     GalevoDeviceAttribute,
@@ -94,6 +95,11 @@ class AristonDevice(ABC):
         return self.attributes.get(DeviceAttribute.NAME, None)
 
     @property
+    def has_dhw(self)-> Optional[bool]:
+        """Get device has domestic hot water"""
+        return self.custom_features.get(CustomDeviceFeatures.HAS_DHW, None)
+
+    @property
     def dhw_mode_changeable(self) -> Optional[bool]:
         """Get device domestic hot water mode changeable wrapper"""
         return self.features.get(DeviceFeatures.DHW_MODE_CHANGEABLE, None)
@@ -107,11 +113,16 @@ class AristonDevice(ABC):
     def firmware_version(self) -> Optional[str]:
         """Get device firmware version wrapper"""
         return self.attributes.get(GalevoDeviceAttribute.FW_VER, None)
-    
+
     @property
     def bus_errors(self) -> list[dict[str, Any]]:
         """Get bus errors list wrapper"""
         return self.bus_errors_list
+
+    @property
+    def hpmp_sys(self) -> Optional[bool]:
+        """Get device heat pump multi power system"""
+        return self.attributes.get(DeviceAttribute.HPMP_SYS, None)
 
     def get_features(self) -> None:
         """Get device features wrapper"""
