@@ -364,7 +364,7 @@ class AristonDevice(ABC):
 
     def are_device_features_available(
         self,
-        device_features: Optional[list[DeviceFeatures or CustomDeviceFeatures or DeviceAttribute]],
+        device_features: Optional[list[DeviceFeatures | CustomDeviceFeatures | DeviceAttribute]],
         system_types: Optional[list[SystemType]],
         whe_types: Optional[list[WheType]],
     ) -> bool:

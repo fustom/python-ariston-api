@@ -435,19 +435,20 @@ class AristonAPI:
             method, path, params=params, json=body, headers=headers, timeout=30000
         )
         if not response.ok:
-            if response.status_code == 405:
-                if not is_retry:
-                    if self.connect():
+            match response.status_code:
+                case 405:
+                    if not is_retry:
+                        if self.connect():
+                            return self.__request(method, path, params, body, True)
+                        raise Exception("Login failed (password changed?)")
+                    raise Exception("Invalid token")
+                case 404:
+                    return None
+                case _:
+                    if not is_retry:
+                        time.sleep(5)
                         return self.__request(method, path, params, body, True)
-                    raise Exception("Login failed (password changed?)")
-                raise Exception("Invalid token")
-            if response.status_code == 404:
-                return None
-            if response.status_code == 500:
-                if not is_retry:
-                    time.sleep(1)
-                    return self.__request(method, path, params, body, True)
-            raise Exception(response.status_code)
+                    raise Exception(response.status_code)
 
         if len(response.content) > 0:
             json = response.json()
@@ -849,23 +850,24 @@ class AristonAPI:
             )
 
             if not response.ok:
-                if response.status == 405:
-                    if not is_retry:
-                        if await self.async_connect():
+                match response.status:
+                    case 405:
+                        if not is_retry:
+                            if await self.async_connect():
+                                return await self.__async_request(
+                                    method, path, params, body, True
+                                )
+                            raise Exception("Login failed (password changed?)")
+                        raise Exception("Invalid token")
+                    case 404:
+                        return None
+                    case _:
+                        if not is_retry:
+                            await asyncio.sleep(5)
                             return await self.__async_request(
                                 method, path, params, body, True
                             )
-                        raise Exception("Login failed (password changed?)")
-                    raise Exception("Invalid token")
-                if response.status == 404:
-                    return None
-                if response.status == 500:
-                    if not is_retry:
-                        await asyncio.sleep(1)
-                        return await self.__async_request(
-                            method, path, params, body, True
-                        )
-                raise Exception(response.status)
+                        raise Exception(response.status)
 
             if response.content_length and response.content_length > 0:
                 json = await response.json()
