@@ -22,6 +22,15 @@ from .device import AristonDevice
 
 _LOGGER = logging.getLogger(__name__)
 
+_MAP_WHE_TYPES_TO_CLASS = {
+    WheType.Evo.value: AristonEvoDevice,
+    WheType.LydosHybrid.value: AristonLydosHybridDevice,
+    WheType.NuosSplit.value: AristonNuosSplitDevice,
+    WheType.Andris2.value: AristonEvoDevice,
+    WheType.Evo2.value: AristonEvoDevice,
+    WheType.Lux2.value: AristonLux2Device,
+    WheType.Lux.value: AristonLuxDevice,
+}
 
 class Ariston:
     """Ariston class"""
@@ -77,53 +86,28 @@ def _get_device(
         return None
 
     system_type = device.get(DeviceAttribute.SYS)
-    if system_type == SystemType.GALEVO.value:
-        return AristonGalevoDevice(
-            api,
-            device,
-            is_metric,
-            language_tag,
-        )
-    if system_type == SystemType.VELIS.value:
-        whe_type = device.get(VelisDeviceAttribute.WHE_TYPE)
-        if whe_type == WheType.LydosHybrid.value:
-            return AristonLydosHybridDevice(
-                api,
-                device,
-            )
-        if whe_type in [WheType.Evo.value, WheType.Evo2.value]:
-            return AristonEvoDevice(
-                api,
-                device,
-            )
-        if whe_type == WheType.NuosSplit.value:
-            return AristonNuosSplitDevice(
-                api,
-                device,
-            )
-        if whe_type == WheType.Lux.value:
-            return AristonLuxDevice(
-                api,
-                device,
-            )
-        if whe_type == WheType.Andris2.value:
-            return AristonEvoDevice(
-                api,
-                device,
-            )
-        if whe_type == WheType.Lux2.value:
-            return AristonLux2Device(
-                api,
-                device,
-            )
-        _LOGGER.exception("Unsupported whe type %s", whe_type)
-        return None
 
-    if system_type == SystemType.BSB.value:
-        return AristonBsbDevice(api, device)
+    match system_type:
+        case SystemType.GALEVO.value:
+            return AristonGalevoDevice(
+                api,
+                device,
+                is_metric,
+                language_tag,
+            )
+        case SystemType.VELIS.value:
+            whe_type = device.get(VelisDeviceAttribute.WHE_TYPE, None)
+            device_class = _MAP_WHE_TYPES_TO_CLASS.get(whe_type, None)
+            if device_class is None:
+                _LOGGER.exception("Unsupported whe type %s", whe_type)
+                return None
+            return device_class(api, device)
 
-    _LOGGER.exception("Unsupported system type %s", system_type)
-    return None
+        case SystemType.BSB.value:
+            return AristonBsbDevice(api, device)
+        case _:
+            _LOGGER.exception("Unsupported system type %s", system_type)
+            return None
 
 
 def _connect(username: str, password: str) -> AristonAPI:
