@@ -39,7 +39,9 @@ class Ariston:
         self.api = None
         self.cloud_devices: list[dict[str, Any]] = []
 
-    async def async_connect(self, username: str, password: str, api_url: str = ARISTON_API_URL) -> bool:
+    async def async_connect(
+        self, username: str, password: str, api_url: str = ARISTON_API_URL
+    ) -> bool:
         """Connect to the ariston cloud"""
         self.api = AristonAPI(username, password, api_url)
         return await self.api.async_connect()
