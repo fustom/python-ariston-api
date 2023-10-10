@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from .ariston_api import AristonAPI, ConnectionException
 from .const import (
+    ARISTON_API_URL,
     DeviceAttribute,
     SystemType,
     VelisDeviceAttribute,
@@ -29,9 +30,9 @@ class Ariston:
         self.api = None
         self.cloud_devices: list[dict[str, Any]] = []
 
-    async def async_connect(self, username: str, password: str) -> bool:
+    async def async_connect(self, username: str, password: str, api_url: str = ARISTON_API_URL) -> bool:
         """Connect to the ariston cloud"""
-        self.api = AristonAPI(username, password)
+        self.api = AristonAPI(username, password, api_url)
         return await self.api.async_connect()
 
     async def async_discover(self) -> Optional[list[dict[str, Any]]]:
