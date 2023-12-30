@@ -25,6 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 _MAP_WHE_TYPES_TO_CLASS = {
     WheType.Evo.value: AristonEvoDevice,
     WheType.LydosHybrid.value: AristonLydosHybridDevice,
+    WheType.Lydos.value: AristonEvoDevice,
     WheType.NuosSplit.value: AristonNuosSplitDevice,
     WheType.Andris2.value: AristonEvoDevice,
     WheType.Evo2.value: AristonEvoDevice,

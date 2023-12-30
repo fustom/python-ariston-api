@@ -236,6 +236,7 @@ class WheType(Enum):
     Unknown = -1
     Evo = 1
     LydosHybrid = 2
+    Lydos = 3
     NuosSplit = 4
     Andris2 = 5
     Evo2 = 6
