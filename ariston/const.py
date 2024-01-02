@@ -532,7 +532,7 @@ class DeviceProperties:
     BUFFER_TIME_PROG_ECONOMY_HEATING_TEMP: Final[str] = "BufferTimeProgEconomyHeatingTemp"
     BUFFER_TIME_PROG_COMFORT_COOLING_TEMP: Final[str] = "BufferTimeProgComfortCoolingTemp"
     BUFFER_TIME_PROG_ECONOMY_COOLING_TEMP: Final[str] = "BufferTimeProgEconomyCoolingTemp"
-    IS_QUITE: Final[str] = "IsQuite"
+    IS_QUIET: Final[str] = "IsQuite" # ariston misspelled IsQuiet
 
 
 class ThermostatProperties:
