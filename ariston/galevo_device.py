@@ -79,7 +79,7 @@ class AristonGalevoDevice(AristonDevice):
             )
 
         self.custom_features[DeviceProperties.CH_FLOW_TEMP] = self.ch_flow_temp_value is not None
-        self.custom_features[DeviceProperties.IS_QUITE] = self.is_quite_value is not None
+        self.custom_features[DeviceProperties.IS_QUIET] = self.is_quiet_value is not None
 
     def update_state(self) -> None:
         """Update the device states from the cloud"""
@@ -333,10 +333,10 @@ class AristonGalevoDevice(AristonDevice):
         )
 
     @property
-    def is_quite_value(self) -> Optional[str]:
-        """Get is quite value"""
+    def is_quiet_value(self) -> Optional[str]:
+        """Get is quiet value"""
         return self._get_item_by_id(
-            DeviceProperties.IS_QUITE, PropertyType.VALUE
+            DeviceProperties.IS_QUIET, PropertyType.VALUE
         )
 
     @property
@@ -806,16 +806,16 @@ class AristonGalevoDevice(AristonDevice):
             ).index(buffer_control_mode),
         )
 
-    def set_is_quite(self, is_quite: bool):
-        """Set is quite"""
+    def set_is_quiet(self, is_quiet: bool):
+        """Set is quiet"""
         self.set_item_by_id(
-            DeviceProperties.IS_QUITE, 1.0 if is_quite else 0.0
+            DeviceProperties.IS_QUIET, 1.0 if is_quiet else 0.0
         )
 
-    async def async_set_is_quite(self, is_quite: bool):
-        """Async set is quite"""
+    async def async_set_is_quiet(self, is_quiet: bool):
+        """Async set is quiet"""
         await self.async_set_item_by_id(
-            DeviceProperties.IS_QUITE, 1.0 if is_quite else 0.0
+            DeviceProperties.IS_QUIET, 1.0 if is_quiet else 0.0
         )
 
     def set_plant_mode(self, plant_mode: PlantMode):
