@@ -11,7 +11,6 @@ ARISTON_LITE: Final[str] = "lite"
 ARISTON_DATA_ITEMS: Final[str] = "dataItems"
 ARISTON_ZONES: Final[str] = "zones"
 ARISTON_BSB_ZONES: Final[str] = "bsbZones"
-ARISTON_PLANT_DATA: Final[str] = "plantData"
 ARISTON_REPORTS: Final[str] = "reports"
 ARISTON_TIME_PROGS: Final[str] = "timeProgs"
 ARISTON_BUS_ERRORS: Final[str] = "busErrors"
@@ -21,6 +20,7 @@ ARISTON_BUS_ERRORS: Final[str] = "busErrors"
 class PlantData(str, Enum):
     """Plant data enum"""
 
+    PD = "plantData"
     Med = "medPlantData"
     Se = "sePlantData"
     Slp = "slpPlantData"
@@ -193,7 +193,7 @@ class EvoPlantMode(WaterHeaterMode):
 
 
 @unique
-class VelisPlantMode(Enum):
+class VelisPlantMode(WaterHeaterMode):
     """Velis plant mode enum"""
 
     MANUAL = 1
@@ -372,6 +372,23 @@ class DeviceFeatures:
     ZONES: Final[str] = "zones"
     WEATHER_PROVIDER: Final[str] = "weatherProvider"
 
+class EvoOneDeviceProperties:
+    """Contants for Velis Evo device properties"""
+
+    AV_SHW: Final[str] = "avShw"
+    ECO: Final[str] = "eco"
+    GW: Final[str] = "gw"
+    MAX_AV_SHW: Final[str] = "maxAvShw"
+    MAX_REQ_SHW: Final[str] = "maxReqShw"
+    MODE: Final[str] = "mode"
+    ON: Final[str] = "on"
+    PROC_REQ_SHW: Final[str] = "procReqShw"
+    REQ_SHW: Final[str] = "reqShw"
+    RM_TM: Final[str] = "rmTm"
+    SHW_P1: Final[str] = "shwP1"
+    STATE: Final[str] = "state"
+    TEMP: Final[str] = "temp"
+    TM_P1: Final[str] = "tmP1"
 
 class VelisDeviceProperties:
     """Contants for Velis device properties"""

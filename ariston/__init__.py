@@ -14,6 +14,7 @@ from .const import (
 from .bsb_device import AristonBsbDevice
 from .lux_device import AristonLuxDevice
 from .lux2_device import AristonLux2Device
+from .evo_one_device import AristonEvoOneDevice
 from .evo_device import AristonEvoDevice
 from .galevo_device import AristonGalevoDevice
 from .lydos_hybrid_device import AristonLydosHybridDevice
@@ -23,7 +24,7 @@ from .device import AristonDevice
 _LOGGER = logging.getLogger(__name__)
 
 _MAP_WHE_TYPES_TO_CLASS = {
-    WheType.Evo.value: AristonEvoDevice,
+    WheType.Evo.value: AristonEvoOneDevice,
     WheType.LydosHybrid.value: AristonLydosHybridDevice,
     WheType.Lydos.value: AristonEvoDevice,
     WheType.NuosSplit.value: AristonNuosSplitDevice,
