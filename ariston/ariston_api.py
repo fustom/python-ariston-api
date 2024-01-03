@@ -16,7 +16,6 @@ from .const import (
     ARISTON_DATA_ITEMS,
     ARISTON_LITE,
     ARISTON_LOGIN,
-    ARISTON_PLANT_DATA,
     ARISTON_PLANTS,
     ARISTON_REMOTE,
     ARISTON_REPORTS,
@@ -232,6 +231,15 @@ class AristonAPI:
             },
         )
 
+    def set_evo_number_of_showers(self, gw_id: str, number_of_showers: int) -> None:
+        """Set Velis Evo number of showers"""
+        self._post(
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.PD.value}/{gw_id}/showers",
+            {
+                "new": int(number_of_showers),
+            },
+        )
+
     def set_evo_mode(self, gw_id: str, value: WaterHeaterMode) -> None:
         """Set Velis Evo mode"""
         self._post(
@@ -401,7 +409,7 @@ class AristonAPI:
     ) -> None:
         """Set holidays"""
         self._post(
-            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANT_DATA}/{gw_id}/holiday",
+            f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.PD}/{gw_id}/holiday",
             {
                 "new": holiday_end_date,
             },
@@ -636,6 +644,15 @@ class AristonAPI:
             },
         )
 
+    async def async_set_evo_number_of_showers(self, gw_id: str, number_of_showers: int) -> None:
+        """Set Velis Evo number of showers"""
+        await self._async_post(
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.PD.value}/{gw_id}/showers",
+            {
+                "new": int(number_of_showers),
+            },
+        )
+
     async def async_set_evo_mode(self, gw_id: str, value: WaterHeaterMode) -> None:
         """Async set Velis Evo mode"""
         await self._async_post(
@@ -813,7 +830,7 @@ class AristonAPI:
         """Async set holidays"""
 
         await self._async_post(
-            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANT_DATA}/{gw_id}/holiday",
+            f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.PD}/{gw_id}/holiday",
             {
                 "new": holiday_end_date,
             },
