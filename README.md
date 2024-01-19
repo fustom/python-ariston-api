@@ -10,6 +10,7 @@ The following devices are currently supported:
 - Ariston Genus One
 - Ariston Nuos Split
 - Ariston Thision S
+- Chaffoteaux INOA S 24
 
 ## Installation
 Use pip3 to install the latest version of this module.

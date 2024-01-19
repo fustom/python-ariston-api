@@ -484,6 +484,18 @@ class AristonGalevoDevice(AristonDevice):
         return self._get_item_by_id(
             ThermostatProperties.ZONE_COMFORT_TEMP, PropertyType.VALUE, zone
         )
+    
+    def get_target_temp_step(self, zone: int) -> int:
+        """Get zone target temp step"""
+        return self._get_item_by_id(
+            ThermostatProperties.ZONE_DESIRED_TEMP, PropertyType.STEP, zone
+        )
+    
+    def get_target_temp_value(self, zone: int) -> int:
+        """Get zone target temp value"""
+        return self._get_item_by_id(
+            ThermostatProperties.ZONE_DESIRED_TEMP, PropertyType.VALUE, zone
+        )
 
     def get_heating_flow_offset_value(self, zone: int) -> int:
         """Get zone heating flow offset value"""
