@@ -102,8 +102,8 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
             self.plant_data,
             self.gw,
             SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF,
-            boost,
-            self.permanent_boost_value,
+            1.0 if boost else 0.0,
+            1.0 if self.permanent_boost_value else 0.0,
         )
         self.plant_settings[SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF] = boost
 
@@ -113,8 +113,8 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
             self.plant_data,
             self.gw,
             SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF,
-            boost,
-            self.permanent_boost_value,
+            1.0 if boost else 0.0,
+            1.0 if self.permanent_boost_value else 0.0,
         )
         self.plant_settings[SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF] = boost
 
@@ -124,8 +124,8 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
             self.plant_data,
             self.gw,
             SeDeviceSettings.SE_ANTI_COOLING_ON_OFF,
-            anti_cooling,
-            self.anti_cooling_value,
+            1.0 if anti_cooling else 0.0,
+            1.0 if self.anti_cooling_value else 0.0,
         )
         self.plant_settings[SeDeviceSettings.SE_ANTI_COOLING_ON_OFF] = anti_cooling
 
@@ -135,7 +135,7 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
             self.plant_data,
             self.gw,
             SeDeviceSettings.SE_ANTI_COOLING_ON_OFF,
-            anti_cooling,
-            self.anti_cooling_value,
+            1.0 if anti_cooling else 0.0,
+            1.0 if self.anti_cooling_value else 0.0,
         )
         self.plant_settings[SeDeviceSettings.SE_ANTI_COOLING_ON_OFF] = anti_cooling
