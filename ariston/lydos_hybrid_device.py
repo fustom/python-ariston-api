@@ -76,6 +76,21 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
         """Get anti cooling value"""
         return self.plant_settings.get(SeDeviceSettings.SE_ANTI_COOLING_ON_OFF, 0)
 
+    @property
+    def anti_cooling_temperature_value(self) -> int:
+        """Get anti cooling temperature value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE, 0)
+
+    @property
+    def anti_cooling_temperature_maximum(self) -> int:
+        """Get anti cooling temperature maximum"""
+        return self.plant_settings.get(SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE_MAX, 0)
+
+    @property
+    def anti_cooling_temperature_minimum(self) -> int:
+        """Get anti cooling temperature minimum"""
+        return self.plant_settings.get(SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE_MIN, 0)
+
     def set_water_heater_operation_mode(self, operation_mode: str):
         """Set water heater operation mode"""
         self.api.set_lydos_mode(self.gw, LydosPlantMode[operation_mode])
@@ -139,3 +154,25 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
             1.0 if self.anti_cooling_value else 0.0,
         )
         self.plant_settings[SeDeviceSettings.SE_ANTI_COOLING_ON_OFF] = anti_cooling
+
+    def set_cooling_temperature_value(self, temperature: float) -> None:
+        """Set cooling temperature value"""
+        self.api.set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE,
+            temperature,
+            self.anti_cooling_temperature_value,
+        )
+        self.plant_settings[SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE] = temperature
+
+    async def async_set_cooling_temperature_value(self, temperature: float) -> None:
+        """Async set cooling temperature value"""
+        await self.api.async_set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE,
+            temperature,
+            self.anti_cooling_temperature_value,
+        )
+        self.plant_settings[SeDeviceSettings.SE_ANTI_COOLING_TEMPERATURE] = temperature
