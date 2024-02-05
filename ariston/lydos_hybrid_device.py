@@ -66,6 +66,16 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
             ConsumptionTimeInterval.LAST_DAY,
         )
 
+    @property
+    def permanent_boost_value(self) -> int:
+        """Get permanent boost value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF, 0)
+
+    @property
+    def anti_cooling_value(self) -> int:
+        """Get anti cooling value"""
+        return self.plant_settings.get(SeDeviceSettings.SE_ANTI_COOLING_ON_OFF, 0)
+
     def set_water_heater_operation_mode(self, operation_mode: str):
         """Set water heater operation mode"""
         self.api.set_lydos_mode(self.gw, LydosPlantMode[operation_mode])
@@ -85,3 +95,47 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
         """Async set water heater temperature"""
         await self.api.async_set_lydos_temperature(self.gw, temperature)
         self.data[LydosDeviceProperties.REQ_TEMP] = temperature
+
+    def set_permanent_boost_value(self, boost: float) -> None:
+        """Set permanent boost value"""
+        self.api.set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF,
+            boost,
+            self.permanent_boost_value,
+        )
+        self.plant_settings[SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF] = boost
+
+    async def async_set_permanent_boost_value(self, boost: float) -> None:
+        """Async set permanent boost value"""
+        await self.api.async_set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF,
+            boost,
+            self.permanent_boost_value,
+        )
+        self.plant_settings[SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF] = boost
+
+    def set_anti_cooling_value(self, anti_cooling: float) -> None:
+        """Set anti cooling value"""
+        self.api.set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_ANTI_COOLING_ON_OFF,
+            anti_cooling,
+            self.anti_cooling_value,
+        )
+        self.plant_settings[SeDeviceSettings.SE_ANTI_COOLING_ON_OFF] = anti_cooling
+
+    async def async_set_anti_cooling_value(self, anti_cooling: float) -> None:
+        """Async set anti cooling value"""
+        await self.api.async_set_velis_plant_setting(
+            self.plant_data,
+            self.gw,
+            SeDeviceSettings.SE_ANTI_COOLING_ON_OFF,
+            anti_cooling,
+            self.anti_cooling_value,
+        )
+        self.plant_settings[SeDeviceSettings.SE_ANTI_COOLING_ON_OFF] = anti_cooling
