@@ -11,12 +11,12 @@ from .const import (
     PlantData,
     WaterHeaterMode,
 )
-from .evo_lydos_device import AristonEvoLydosDevice
+from .velis_base_device import AristonVelisBaseDevice
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class AristonEvoOneDevice(AristonEvoLydosDevice):
+class AristonEvoOneDevice(AristonVelisBaseDevice):
     """Class representing a physical device, it's state and properties."""
 
     @property
@@ -33,6 +33,16 @@ class AristonEvoOneDevice(AristonEvoLydosDevice):
     def water_heater_mode(self) -> type[WaterHeaterMode]:
         """Return the water heater mode class"""
         return VelisPlantMode
+
+    @property
+    def water_heater_current_temperature(self) -> Optional[float]:
+        """Get water heater current temperature"""
+        return self.data.get(EvoOneDeviceProperties.TEMP, None)
+
+    @property
+    def av_shw_value(self) -> Optional[int]:
+        """Get average showers value"""
+        return self.data.get(EvoOneDeviceProperties.AV_SHW, None)
 
     @property
     def water_heater_eco_value(self) -> Optional[int]:
@@ -97,30 +107,3 @@ class AristonEvoOneDevice(AristonEvoLydosDevice):
         """Async set water heater number of showers"""
         await self.api.async_set_evo_number_of_showers(self.gw, number_of_showers)
         self.data[EvoOneDeviceProperties.REQ_SHW] = number_of_showers
-
-    @property
-    def water_heater_maximum_temperature(self) -> Optional[float]:
-        """Get water heater maximum temperature"""
-        return 0
-
-    @property
-    def max_setpoint_temp(self) -> str:
-        raise NotImplementedError
-
-    @property
-    def anti_legionella_on_off(self) -> str:
-        raise NotImplementedError
-
-    @property
-    def water_heater_maximum_setpoint_temperature_minimum(self) -> Optional[float]:
-        raise NotImplementedError
-
-    @property
-    def water_heater_maximum_setpoint_temperature_maximum(self) -> Optional[float]:
-        raise NotImplementedError
-
-    def set_water_heater_temperature(self, temperature: float) -> None:
-        raise NotImplementedError
-
-    async def async_set_water_heater_temperature(self, temperature: float) -> None:
-        raise NotImplementedError

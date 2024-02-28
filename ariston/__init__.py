@@ -19,7 +19,7 @@ from .evo_device import AristonEvoDevice
 from .galevo_device import AristonGalevoDevice
 from .lydos_hybrid_device import AristonLydosHybridDevice
 from .nuos_split_device import AristonNuosSplitDevice
-from .device import AristonDevice
+from .base_device import AristonBaseDevice
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class Ariston:
 
     async def async_hello(
         self, gateway: str, is_metric: bool = True, language_tag: str = "en-US"
-    ) -> Optional[AristonDevice]:
+    ) -> Optional[AristonBaseDevice]:
         """Get ariston device"""
         if self.api is None:
             _LOGGER.exception("Call async_connect() first")
@@ -79,7 +79,7 @@ def _get_device(
     gateway: str,
     is_metric: bool = True,
     language_tag: str = "en-US",
-) -> Optional[AristonDevice]:
+) -> Optional[AristonBaseDevice]:
     """Get ariston device"""
     device = next(
         (dev for dev in cloud_devices if dev.get(DeviceAttribute.GW) == gateway),
@@ -142,7 +142,7 @@ def hello(
     gateway: str,
     is_metric: bool = True,
     language_tag: str = "en-US",
-) -> Optional[AristonDevice]:
+) -> Optional[AristonBaseDevice]:
     """Get ariston device"""
     api = _connect(username, password)
     cloud_devices = _discover(api)
@@ -184,7 +184,7 @@ async def async_hello(
     gateway: str,
     is_metric: bool = True,
     language_tag: str = "en-US",
-) -> Optional[AristonDevice]:
+) -> Optional[AristonBaseDevice]:
     """Get ariston device"""
     api = await _async_connect(username, password)
     cloud_devices = await _async_discover(api)

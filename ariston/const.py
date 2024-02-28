@@ -372,16 +372,19 @@ class DeviceFeatures:
     ZONES: Final[str] = "zones"
     WEATHER_PROVIDER: Final[str] = "weatherProvider"
 
-class EvoOneDeviceProperties:
+class VelisBaseDeviceProperties:
+    """Contants for VelisBase device properties"""
+    GW: Final[str] = "gw"
+    MODE: Final[str] = "mode"
+    ON: Final[str] = "on"
+
+class EvoOneDeviceProperties(VelisBaseDeviceProperties):
     """Contants for Velis Evo device properties"""
 
     AV_SHW: Final[str] = "avShw"
     ECO: Final[str] = "eco"
-    GW: Final[str] = "gw"
     MAX_AV_SHW: Final[str] = "maxAvShw"
     MAX_REQ_SHW: Final[str] = "maxReqShw"
-    MODE: Final[str] = "mode"
-    ON: Final[str] = "on"
     PROC_REQ_SHW: Final[str] = "procReqShw"
     REQ_SHW: Final[str] = "reqShw"
     RM_TM: Final[str] = "rmTm"
@@ -390,12 +393,9 @@ class EvoOneDeviceProperties:
     TEMP: Final[str] = "temp"
     TM_P1: Final[str] = "tmP1"
 
-class VelisDeviceProperties:
+class VelisDeviceProperties(VelisBaseDeviceProperties):
     """Contants for Velis device properties"""
 
-    GW: Final[str] = "gw"
-    MODE: Final[str] = "mode"
-    ON: Final[str] = "on"
     PROC_REQ_TEMP: Final[str] = "procReqTemp"
 
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from abc import ABC
 from typing import Optional
 
 from .velis_device import AristonVelisDevice
@@ -10,7 +11,7 @@ from .const import EvoLydosDeviceProperties
 _LOGGER = logging.getLogger(__name__)
 
 
-class AristonEvoLydosDevice(AristonVelisDevice):
+class AristonEvoLydosDevice(AristonVelisDevice, ABC):
     """Class representing a physical device, it's state and properties."""
 
     @property
