@@ -32,3 +32,8 @@ class AristonEvoLydosDevice(AristonVelisDevice):
     def is_heating(self) -> Optional[bool]:
         """Get is the water heater heating"""
         return self.data.get(EvoLydosDeviceProperties.HEAT_REQ, None)
+
+    @property
+    def is_antileg(self) -> Optional[bool]:
+        """Is anti-legionella cycle running"""
+        return self.data.get(EvoLydosDeviceProperties.ANTI_LEG, None)
