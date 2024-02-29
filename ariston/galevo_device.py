@@ -109,8 +109,11 @@ class AristonGalevoDevice(AristonDevice):
 
     def _get_features(self) -> None:
         """Set custom features"""
-        self.custom_features[CustomDeviceFeatures.HAS_DHW] = self.features.get(
-            DeviceFeatures.HAS_BOILER
+        self.custom_features[CustomDeviceFeatures.HAS_DHW] = (
+            self.features.get(DeviceFeatures.HAS_BOILER, False) or
+            self.features.get(DeviceFeatures.DHW_BOILER_PRESENT, False) or
+            self.features.get(DeviceFeatures.DHW_MODE_CHANGEABLE, False) or
+            self.features.get(DeviceFeatures.DHW_PROG_SUPPORTED, False)
         )
 
     def get_features(self) -> None:
