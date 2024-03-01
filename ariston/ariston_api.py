@@ -21,6 +21,7 @@ from .const import (
     ARISTON_REPORTS,
     ARISTON_TIME_PROGS,
     ARISTON_VELIS,
+    ARISTON_MENU_ITEMS,
     BsbOperativeMode,
     BsbZoneMode,
     DeviceFeatures,
@@ -31,6 +32,7 @@ from .const import (
     ThermostatProperties,
     WaterHeaterMode,
     ZoneAttribute,
+    MenuItemNames
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -204,6 +206,15 @@ class AristonAPI:
         if settings is not None:
             return settings
         return dict()
+
+    def get_menu_items(self, gw_id: str) -> list[dict[str, Any]]:
+        """Get menu items"""
+        items = self._get(
+            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={MenuItemNames()}"
+        )
+        if items is not None:
+            return items
+        return list()
 
     def set_property(
         self,
@@ -465,13 +476,13 @@ class AristonAPI:
 
         return None
 
-    def _post(self, path: str, body: Any) -> Optional[dict[str, Any]]:
+    def _post(self, path: str, body: Any) -> Any:
         """POST request"""
         return self.__request("POST", path, None, body)
 
     def _get(
         self, path: str, params: Optional[dict[str, Any]] = None
-    ) -> Optional[dict[str, Any]]:
+    ) -> Any:
         """GET request"""
         return self.__request("GET", path, params, None)
 
@@ -617,6 +628,15 @@ class AristonAPI:
         if med_plant_settings is not None:
             return med_plant_settings
         return dict()
+
+    async def async_get_menu_items(self, gw_id: str) -> list[dict[str, Any]]:
+        """Async get menu items"""
+        items = await self._async_get(
+            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={MenuItemNames()}"
+        )
+        if items is not None:
+            return items
+        return list()
 
     async def async_set_property(
         self,
@@ -893,12 +913,12 @@ class AristonAPI:
 
             return None
 
-    async def _async_post(self, path: str, body: Any) -> Optional[dict[str, Any]]:
+    async def _async_post(self, path: str, body: Any) -> Any:
         """Async POST request"""
         return await self.__async_request("POST", path, None, body)
 
     async def _async_get(
         self, path: str, params: Optional[dict[str, Any]] = None
-    ) -> Optional[dict[str, Any]]:
+    ) -> Any:
         """Async GET request"""
         return await self.__async_request("GET", path, params, None)

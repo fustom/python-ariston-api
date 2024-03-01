@@ -22,6 +22,7 @@ from .const import (
     ThermostatProperties,
     ZoneAttribute,
     ZoneMode,
+    MenuItemNames
 )
 from .device import AristonDevice
 
@@ -43,6 +44,7 @@ class AristonGalevoDevice(AristonDevice):
         self.language_tag = language_tag
         self.consumptions_settings: dict[str, Any] = dict()
         self.energy_account: dict[str, Any] = dict()
+        self.menu_items: list[dict[str, Any]] = list()
 
     @property
     def consumption_type(self) -> str:
@@ -92,6 +94,7 @@ class AristonGalevoDevice(AristonDevice):
             self.language_tag,
             self.umsys,
         )
+        self.menu_items = self.api.get_menu_items(self.gw)
         self._update_state()
 
     async def async_update_state(self) -> None:
@@ -99,11 +102,14 @@ class AristonGalevoDevice(AristonDevice):
         if len(self.features) == 0:
             await self.async_get_features()
 
-        self.data = await self.api.async_get_properties(
-            self.gw,
-            self.features,
-            self.language_tag,
-            self.umsys,
+        (self.data, self.menu_items) = await asyncio.gather(
+            self.api.async_get_properties(
+                self.gw,
+                self.features,
+                self.language_tag,
+                self.umsys,
+            ),
+            self.api.async_get_menu_items(self.gw)
         )
         self._update_state()
 
@@ -446,6 +452,26 @@ class AristonGalevoDevice(AristonDevice):
             )[index]
         return PlantMode.UNDEFINED.name
 
+    @property
+    def signal_strength_value(self) -> Any:
+        """Get signal strength value"""
+        return self._get_menu_item_by_id(MenuItemNames.SIGNAL_STRENGTH, PropertyType.VALUE)
+
+    @property
+    def signal_strength_unit(self) -> Any:
+        """Get signal strength unit"""
+        return self._get_menu_item_by_id(MenuItemNames.SIGNAL_STRENGTH, PropertyType.UNIT)
+
+    @property
+    def ch_return_temp_value(self) -> Any:
+        """Get ch return temp value"""
+        return self._get_menu_item_by_id(MenuItemNames.CH_RETURN_TEMP, PropertyType.VALUE)
+
+    @property
+    def ch_return_temp_unit(self) -> Any:
+        """Get ch return temp unit"""
+        return self._get_menu_item_by_id(MenuItemNames.CH_RETURN_TEMP, PropertyType.UNIT)
+
     def get_measured_temp_unit(self, zone: int) -> str:
         """Get zone measured temp unit"""
         return self._get_item_by_id(
@@ -487,13 +513,13 @@ class AristonGalevoDevice(AristonDevice):
         return self._get_item_by_id(
             ThermostatProperties.ZONE_COMFORT_TEMP, PropertyType.VALUE, zone
         )
-    
+
     def get_target_temp_step(self, zone: int) -> int:
         """Get zone target temp step"""
         return self._get_item_by_id(
             ThermostatProperties.ZONE_DESIRED_TEMP, PropertyType.STEP, zone
         )
-    
+
     def get_target_temp_value(self, zone: int) -> int:
         """Get zone target temp value"""
         return self._get_item_by_id(
@@ -582,6 +608,19 @@ class AristonGalevoDevice(AristonDevice):
                 for item in self.data.get("items", list[dict[str, Any]]())
                 if item.get("id") == item_id
                 and item.get(PropertyType.ZONE) == zone_number
+            ),
+            None,
+        )
+
+    def _get_menu_item_by_id(
+        self, menu_item_id: int, item_value: str
+    ) -> Any:
+        """Get item attribute from data"""
+        return next(
+            (
+                item.get(item_value)
+                for item in self.menu_items
+                if item.get("id") == menu_item_id
             ),
             None,
         )

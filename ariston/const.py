@@ -14,6 +14,7 @@ ARISTON_BSB_ZONES: Final[str] = "bsbZones"
 ARISTON_REPORTS: Final[str] = "reports"
 ARISTON_TIME_PROGS: Final[str] = "timeProgs"
 ARISTON_BUS_ERRORS: Final[str] = "busErrors"
+ARISTON_MENU_ITEMS: Final[str] = "menuItems"
 
 
 @unique
@@ -612,3 +613,11 @@ class BusErrorsProperties:
     ERR_DEX: Final[str] = "errDex"
     RES: Final[str] = "res"
     BLK: Final[str] = "blk"
+
+class MenuItemNames:
+    """Constants for menu items"""
+    CH_RETURN_TEMP: Final[int] = 124
+    SIGNAL_STRENGTH: Final[int] = 119
+
+    def __str__(self):
+        return ','.join([str(getattr(self, names)) for names in dir(self) if not names.startswith("__")])
