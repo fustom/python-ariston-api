@@ -233,9 +233,17 @@ class AristonBsbDevice(AristonDevice):
         """Get zone comfort temp max"""
         return self.get_zone_ch_comf_temp(zone).get(PropertyType.MAX, 24)
 
+    def get_target_temp_step(self, zone: int) -> int:
+        """Get target temp step"""
+        return self.get_comfort_temp_step(zone)
+
     def get_comfort_temp_step(self, zone: int) -> int:
         """Get zone comfort temp step"""
         return self.get_zone_ch_comf_temp(zone).get(PropertyType.STEP, 0.5)
+
+    def get_target_temp_value(self, zone: int) -> int:
+        """Get target temp value"""
+        return self.get_comfort_temp_value(zone)
 
     def get_comfort_temp_value(self, zone: int) -> int:
         """Get zone comfort temp value"""
