@@ -442,7 +442,7 @@ class AristonAPI:
         is_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Request with requests"""
-        headers = {"ar.authToken": self.__token}
+        headers = {"User-Agent": "RestSharp/106.11.7.0", "ar.authToken": self.__token}
 
         _LOGGER.debug(
             "Request method %s, path: %s, params: %s",
@@ -872,7 +872,7 @@ class AristonAPI:
         is_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Async request with aiohttp"""
-        headers = {"ar.authToken": self.__token}
+        headers = {"User-Agent": "RestSharp/106.11.7.0", "ar.authToken": self.__token}
 
         _LOGGER.debug(
             "Request method %s, path: %s, params: %s",
