@@ -130,9 +130,9 @@ def _discover(api: AristonAPI) -> list[dict[str, Any]]:
     return cloud_devices
 
 
-def discover(username: str, password: str) -> list[dict[str, Any]]:
+def discover(username: str, password: str, api_url: str = ARISTON_API_URL) -> list[dict[str, Any]]:
     """Retreive ariston devices from the cloud"""
-    api = _connect(username, password)
+    api = _connect(username, password, api_url)
     return _discover(api)
 
 
@@ -142,9 +142,10 @@ def hello(
     gateway: str,
     is_metric: bool = True,
     language_tag: str = "en-US",
+    api_url: str = ARISTON_API_URL,
 ) -> Optional[AristonBaseDevice]:
     """Get ariston device"""
-    api = _connect(username, password)
+    api = _connect(username, password, api_url)
     cloud_devices = _discover(api)
     return _get_device(cloud_devices, api, gateway, is_metric, language_tag)
 
@@ -172,9 +173,9 @@ async def _async_discover(api: AristonAPI) -> list[dict[str, Any]]:
     return cloud_devices
 
 
-async def async_discover(username: str, password: str) -> list[dict[str, Any]]:
+async def async_discover(username: str, password: str, api_url: str = ARISTON_API_URL) -> list[dict[str, Any]]:
     """Retreive ariston devices from the cloud"""
-    api = await _async_connect(username, password)
+    api = await _async_connect(username, password, api_url)
     return await _async_discover(api)
 
 
@@ -184,8 +185,9 @@ async def async_hello(
     gateway: str,
     is_metric: bool = True,
     language_tag: str = "en-US",
+    api_url: str = ARISTON_API_URL,
 ) -> Optional[AristonBaseDevice]:
     """Get ariston device"""
-    api = await _async_connect(username, password)
+    api = await _async_connect(username, password, api_url)
     cloud_devices = await _async_discover(api)
     return _get_device(cloud_devices, api, gateway, is_metric, language_tag)
