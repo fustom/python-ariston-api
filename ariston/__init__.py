@@ -114,9 +114,9 @@ def _get_device(
             return None
 
 
-def _connect(username: str, password: str) -> AristonAPI:
+def _connect(username: str, password: str, api_url: str = ARISTON_API_URL) -> AristonAPI:
     """Connect to ariston api"""
-    api = AristonAPI(username, password)
+    api = AristonAPI(username, password, api_url)
     api.connect()
     return api
 
@@ -149,9 +149,9 @@ def hello(
     return _get_device(cloud_devices, api, gateway, is_metric, language_tag)
 
 
-async def _async_connect(username: str, password: str) -> AristonAPI:
+async def _async_connect(username: str, password: str, api_url: str = ARISTON_API_URL) -> AristonAPI:
     """Async connect to ariston api"""
-    api = AristonAPI(username, password)
+    api = AristonAPI(username, password, api_url)
     if not await api.async_connect():
         raise ConnectionException
     return api
