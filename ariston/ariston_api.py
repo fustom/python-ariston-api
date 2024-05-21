@@ -464,7 +464,7 @@ class AristonAPI:
                 case 404:
                     return None
                 case 429:
-                    raise RequestFailedError(response.status_code, response.text)
+                    raise Exception(response.status_code, response.text)
                 case _:
                     if not is_retry:
                         time.sleep(5)
@@ -901,7 +901,7 @@ class AristonAPI:
                     case 404:
                         return None
                     case 429:
-                        raise RequestFailedError(response.status_code, response.text)
+                        raise Exception(response.status_code, response.text)
                     case _:
                         if not is_retry:
                             await asyncio.sleep(5)
