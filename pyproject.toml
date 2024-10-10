@@ -16,3 +16,7 @@ requires-python = ">=3.9"
 license = { file = "LICENSE" }
 version = "0.19.6"
 dynamic = ['description']
+
+[project.urls]
+Repository = "https://github.com/fustom/python-ariston-api.git"
+Issues = "https://github.com/fustom/python-ariston-api/issues"
