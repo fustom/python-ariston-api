@@ -1,7 +1,10 @@
 """Ariston module"""
+
 import asyncio
 import logging
 from typing import Any, Optional
+
+from ariston.lydos_device import AristonLydosDevice
 
 from .ariston_api import AristonAPI, ConnectionException
 from .const import (
@@ -26,13 +29,14 @@ _LOGGER = logging.getLogger(__name__)
 _MAP_WHE_TYPES_TO_CLASS = {
     WheType.Evo.value: AristonEvoOneDevice,
     WheType.LydosHybrid.value: AristonLydosHybridDevice,
-    WheType.Lydos.value: AristonEvoDevice,
+    WheType.Lydos.value: AristonLydosDevice,
     WheType.NuosSplit.value: AristonNuosSplitDevice,
     WheType.Andris2.value: AristonEvoDevice,
     WheType.Evo2.value: AristonEvoDevice,
     WheType.Lux2.value: AristonLux2Device,
     WheType.Lux.value: AristonLuxDevice,
 }
+
 
 class Ariston:
     """Ariston class"""
@@ -114,7 +118,9 @@ def _get_device(
             return None
 
 
-def _connect(username: str, password: str, api_url: str = ARISTON_API_URL) -> AristonAPI:
+def _connect(
+    username: str, password: str, api_url: str = ARISTON_API_URL
+) -> AristonAPI:
     """Connect to ariston api"""
     api = AristonAPI(username, password, api_url)
     api.connect()
@@ -130,7 +136,9 @@ def _discover(api: AristonAPI) -> list[dict[str, Any]]:
     return cloud_devices
 
 
-def discover(username: str, password: str, api_url: str = ARISTON_API_URL) -> list[dict[str, Any]]:
+def discover(
+    username: str, password: str, api_url: str = ARISTON_API_URL
+) -> list[dict[str, Any]]:
     """Retreive ariston devices from the cloud"""
     api = _connect(username, password, api_url)
     return _discover(api)
@@ -150,7 +158,9 @@ def hello(
     return _get_device(cloud_devices, api, gateway, is_metric, language_tag)
 
 
-async def _async_connect(username: str, password: str, api_url: str = ARISTON_API_URL) -> AristonAPI:
+async def _async_connect(
+    username: str, password: str, api_url: str = ARISTON_API_URL
+) -> AristonAPI:
     """Async connect to ariston api"""
     api = AristonAPI(username, password, api_url)
     if not await api.async_connect():
@@ -173,7 +183,9 @@ async def _async_discover(api: AristonAPI) -> list[dict[str, Any]]:
     return cloud_devices
 
 
-async def async_discover(username: str, password: str, api_url: str = ARISTON_API_URL) -> list[dict[str, Any]]:
+async def async_discover(
+    username: str, password: str, api_url: str = ARISTON_API_URL
+) -> list[dict[str, Any]]:
     """Retreive ariston devices from the cloud"""
     api = await _async_connect(username, password, api_url)
     return await _async_discover(api)
