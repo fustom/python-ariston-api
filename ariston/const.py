@@ -15,7 +15,7 @@ ARISTON_REPORTS: Final[str] = "reports"
 ARISTON_TIME_PROGS: Final[str] = "timeProgs"
 ARISTON_BUS_ERRORS: Final[str] = "busErrors"
 ARISTON_MENU_ITEMS: Final[str] = "menuItems"
-
+ARISTON_USER_AGENT: Final[str] = "RestSharp/106.11.7.0"
 
 @unique
 class PlantData(str, Enum):

@@ -6,6 +6,7 @@ from typing import Any, Optional
 from .ariston_api import AristonAPI, ConnectionException
 from .const import (
     ARISTON_API_URL,
+    ARISTON_USER_AGENT,
     DeviceAttribute,
     SystemType,
     VelisDeviceAttribute,
@@ -42,10 +43,10 @@ class Ariston:
         self.cloud_devices: list[dict[str, Any]] = []
 
     async def async_connect(
-        self, username: str, password: str, api_url: str = ARISTON_API_URL
+        self, username: str, password: str, api_url: str = ARISTON_API_URL, user_agent: str = ARISTON_USER_AGENT
     ) -> bool:
         """Connect to the ariston cloud"""
-        self.api = AristonAPI(username, password, api_url)
+        self.api = AristonAPI(username, password, api_url, user_agent)
         return await self.api.async_connect()
 
     async def async_discover(self) -> Optional[list[dict[str, Any]]]:
@@ -114,9 +115,9 @@ def _get_device(
             return None
 
 
-def _connect(username: str, password: str, api_url: str = ARISTON_API_URL) -> AristonAPI:
+def _connect(username: str, password: str, api_url: str = ARISTON_API_URL, user_agent: str = ARISTON_USER_AGENT) -> AristonAPI:
     """Connect to ariston api"""
-    api = AristonAPI(username, password, api_url)
+    api = AristonAPI(username, password, api_url, user_agent)
     api.connect()
     return api
 
@@ -150,9 +151,9 @@ def hello(
     return _get_device(cloud_devices, api, gateway, is_metric, language_tag)
 
 
-async def _async_connect(username: str, password: str, api_url: str = ARISTON_API_URL) -> AristonAPI:
+async def _async_connect(username: str, password: str, api_url: str = ARISTON_API_URL, user_agent: str = ARISTON_USER_AGENT) -> AristonAPI:
     """Async connect to ariston api"""
-    api = AristonAPI(username, password, api_url)
+    api = AristonAPI(username, password, api_url, user_agent)
     if not await api.async_connect():
         raise ConnectionException
     return api
