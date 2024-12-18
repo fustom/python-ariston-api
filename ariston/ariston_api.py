@@ -11,6 +11,7 @@ import requests
 
 from .const import (
     ARISTON_API_URL,
+    ARISTON_USER_AGENT,
     ARISTON_BSB_ZONES,
     ARISTON_BUS_ERRORS,
     ARISTON_DATA_ITEMS,
@@ -45,12 +46,13 @@ class ConnectionException(Exception):
 class AristonAPI:
     """Ariston API class"""
 
-    def __init__(self, username: str, password: str, api_url: str = ARISTON_API_URL) -> None:
+    def __init__(self, username: str, password: str, api_url: str = ARISTON_API_URL, user_agent: str = ARISTON_USER_AGENT) -> None:
         """Constructor for Ariston API."""
         self.__username = username
         self.__password = password
         self.__api_url = api_url
         self.__token = ""
+        self.__user_agent = user_agent
 
     def connect(self) -> bool:
         """Login to ariston cloud and get token"""
@@ -442,7 +444,7 @@ class AristonAPI:
         is_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Request with requests"""
-        headers = {"User-Agent": "RestSharp/106.11.7.0", "ar.authToken": self.__token}
+        headers = {"User-Agent": self.__user_agent, "ar.authToken": self.__token}
 
         _LOGGER.debug(
             "Request method %s, path: %s, params: %s",
@@ -875,7 +877,7 @@ class AristonAPI:
         is_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Async request with aiohttp"""
-        headers = {"User-Agent": "RestSharp/106.11.7.0", "ar.authToken": self.__token}
+        headers = {"User-Agent": self.__user_agent, "ar.authToken": self.__token}
 
         _LOGGER.debug(
             "Request method %s, path: %s, params: %s",
