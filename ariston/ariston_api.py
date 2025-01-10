@@ -289,12 +289,13 @@ class AristonAPI:
             },
         )
 
-    def set_bsb_zone_mode(self, gw_id: str, zone: int, value: BsbZoneMode) -> None:
+    def set_bsb_zone_mode(self, gw_id: str, zone: int, value: BsbZoneMode, old_value: BsbZoneMode, is_cooling: bool) -> None:
         """Set Bsb zone mode"""
         self._post(
-            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/mode",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/mode?isCooling={is_cooling}",
             {
                 "new": value.value,
+                "old": old_value.value
             },
         )
 
@@ -349,15 +350,19 @@ class AristonAPI:
         )
 
     def set_bsb_zone_temperature(
-        self, gw_id: str, zone: int, comfort: float, reduced: float
+        self, gw_id: str, zone: int, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float], is_cooling: bool
     ) -> None:
         """Set Bsb zone temperature"""
         self._post(
-            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/temperatures",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/temperatures?isCooling={is_cooling}",
             {
                 "new": {
                     "comf": comfort,
                     "econ": reduced,
+                },
+                "old": {
+                    "comf": old_comfort,
+                    "econ": old_reduced,
                 }
             },
         )
@@ -717,13 +722,14 @@ class AristonAPI:
         )
 
     async def async_set_bsb_zone_mode(
-        self, gw_id: str, zone: int, value: BsbZoneMode
+        self, gw_id: str, zone: int, value: BsbZoneMode, old_value: BsbZoneMode, is_cooling: bool
     ) -> None:
         """Async set Bsb zone mode"""
         await self._async_post(
-            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/mode",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/mode?isCooling={is_cooling}",
             {
                 "new": value.value,
+                "old": old_value.value
             },
         )
 
@@ -782,15 +788,19 @@ class AristonAPI:
         )
 
     async def async_set_bsb_zone_temperature(
-        self, gw_id: str, zone: int, comfort: float, reduced: float
+        self, gw_id: str, zone: int, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float], is_cooling: bool
     ) -> None:
         """Async set Bsb zone temperature"""
         await self._async_post(
-            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/temperatures",
+            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/temperatures?isCooling={is_cooling}",
             {
                 "new": {
                     "comf": comfort,
                     "econ": reduced,
+                },
+                "old": {
+                    "comf": old_comfort,
+                    "econ": old_reduced,
                 }
             },
         )
