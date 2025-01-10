@@ -339,11 +339,13 @@ class AristonBsbDevice(AristonDevice):
 
     def set_zone_mode(self, zone_mode: BsbZoneMode, zone: int):
         """Set zone mode"""
-        self.api.set_bsb_zone_mode(self.gw, zone, zone_mode)
+        self.api.set_bsb_zone_mode(self.gw, zone, zone_mode, self.get_zone_mode(zone), self.is_plant_in_cool_mode)
+        self.get_zone(zone)[BsbZoneProperties.MODE][PropertyType.VALUE] = zone_mode
 
     async def async_set_zone_mode(self, zone_mode: BsbZoneMode, zone: int):
         """Async set zone mode"""
-        await self.api.async_set_bsb_zone_mode(self.gw, zone, zone_mode)
+        await self.api.async_set_bsb_zone_mode(self.gw, zone, zone_mode, self.get_zone_mode(zone), self.is_plant_in_cool_mode)
+        self.get_zone(zone)[BsbZoneProperties.MODE][PropertyType.VALUE] = zone_mode
 
     @property
     def outside_temp_value(self) -> str:
@@ -360,7 +362,7 @@ class AristonBsbDevice(AristonDevice):
         if len(self.data) == 0:
             self.update_state()
         reduced = self.get_reduced_temp_value(zone)
-        self.api.set_bsb_zone_temperature(self.gw, zone, temp, reduced)
+        self.api.set_bsb_zone_temperature(self.gw, zone, temp, reduced, self.get_comfort_temp_value(zone), self.get_reduced_temp_value(zone), self.is_plant_in_cool_mode)
         self.get_zone_ch_comf_temp(zone)[PropertyType.VALUE] = temp
 
     async def async_set_comfort_temp(self, temp: float, zone: int):
@@ -368,7 +370,7 @@ class AristonBsbDevice(AristonDevice):
         if len(self.data) == 0:
             await self.async_update_state()
         reduced = self.get_reduced_temp_value(zone)
-        await self.api.async_set_bsb_zone_temperature(self.gw, zone, temp, reduced)
+        await self.api.async_set_bsb_zone_temperature(self.gw, zone, temp, reduced, self.get_comfort_temp_value(zone), self.get_reduced_temp_value(zone), self.is_plant_in_cool_mode)
         self.get_zone_ch_comf_temp(zone)[PropertyType.VALUE] = temp
 
     def set_reduced_temp(self, temp: float, zone: int):
@@ -376,7 +378,7 @@ class AristonBsbDevice(AristonDevice):
         if len(self.data) == 0:
             self.update_state()
         comfort = self.get_comfort_temp_value(zone)
-        self.api.set_bsb_zone_temperature(self.gw, zone, comfort, temp)
+        self.api.set_bsb_zone_temperature(self.gw, zone, comfort, temp, self.get_comfort_temp_value(zone), self.get_reduced_temp_value(zone), self.is_plant_in_cool_mode)
         self.get_zone_ch_red_temp(zone)[PropertyType.VALUE] = temp
 
     async def async_set_reduced_temp(self, temp: float, zone: int):
@@ -384,5 +386,5 @@ class AristonBsbDevice(AristonDevice):
         if len(self.data) == 0:
             await self.async_update_state()
         comfort = self.get_comfort_temp_value(zone)
-        await self.api.async_set_bsb_zone_temperature(self.gw, zone, comfort, temp)
+        await self.api.async_set_bsb_zone_temperature(self.gw, zone, comfort, temp, self.get_comfort_temp_value(zone), self.get_reduced_temp_value(zone), self.is_plant_in_cool_mode)
         self.get_zone_ch_red_temp(zone)[PropertyType.VALUE] = temp
