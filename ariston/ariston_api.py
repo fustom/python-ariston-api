@@ -466,8 +466,8 @@ class AristonAPI:
                 case 404:
                     return None
                 case 429:
-                    content = response.content.read_nowait()
-                    raise Exception(response.status, content)
+                    content = response.content.decode()
+                    raise Exception(response.status_code, content)
                 case _:
                     if not is_retry:
                         time.sleep(5)

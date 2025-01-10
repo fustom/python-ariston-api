@@ -49,11 +49,11 @@ class Ariston:
         self.api = AristonAPI(username, password, api_url, user_agent)
         return await self.api.async_connect()
 
-    async def async_discover(self) -> Optional[list[dict[str, Any]]]:
+    async def async_discover(self) -> list[dict[str, Any]]:
         """Retreive ariston devices from the cloud"""
         if self.api is None:
             _LOGGER.exception("Call async_connect first")
-            return None
+            return []
         cloud_devices = await _async_discover(self.api)
         self.cloud_devices = cloud_devices
         return cloud_devices
