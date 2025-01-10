@@ -38,7 +38,7 @@ class AristonBaseDevice(ABC):
         self.consumptions_sequences: list[dict[str, Any]] = list()
         self.data: dict[str, Any] = dict()
         self.consumption_sequence_last_changed_utc: dt.datetime = (
-            dt.datetime.utcfromtimestamp(0).replace(tzinfo=dt.timezone.utc)
+            dt.datetime.fromtimestamp(0, dt.UTC).replace(tzinfo=dt.timezone.utc)
         )
         self.gw: str = self.attributes.get(DeviceAttribute.GW, "")
         self.bus_errors_list: list[dict[str, Any]] = []
@@ -318,7 +318,7 @@ class AristonBaseDevice(ABC):
 
     def are_device_features_available(
         self,
-        device_features: Optional[list[DeviceFeatures | CustomDeviceFeatures | DeviceAttribute]],
+        device_features: Optional[list[str]],
         system_types: Optional[list[SystemType]],
         whe_types: Optional[list[WheType]],
     ) -> bool:
@@ -332,9 +332,9 @@ class AristonBaseDevice(ABC):
         if device_features is not None:
             for device_feature in device_features:
                 if (
-                    self.features.get(str(device_feature)) is not True
-                    and self.custom_features.get(str(device_feature)) is not True
-                    and self.attributes.get(str(device_feature)) is not True
+                    self.features.get(device_feature) is not True
+                    and self.custom_features.get(device_feature) is not True
+                    and self.attributes.get(device_feature) is not True
                 ):
                     return False
 
