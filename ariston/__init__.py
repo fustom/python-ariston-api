@@ -23,19 +23,21 @@ from .lydos_hybrid_device import AristonLydosHybridDevice
 from .nuos_split_device import AristonNuosSplitDevice
 from .base_device import AristonBaseDevice
 from .velis_base_device import AristonVelisBaseDevice
+from .lydos_device import AristonLydosDevice
 
 _LOGGER = logging.getLogger(__name__)
 
 _MAP_WHE_TYPES_TO_CLASS: dict[int, Type[AristonVelisBaseDevice]] = {
     WheType.Evo.value: AristonEvoOneDevice,
     WheType.LydosHybrid.value: AristonLydosHybridDevice,
-    WheType.Lydos.value: AristonEvoDevice,
+    WheType.Lydos.value: AristonLydosDevice,
     WheType.NuosSplit.value: AristonNuosSplitDevice,
     WheType.Andris2.value: AristonEvoDevice,
     WheType.Evo2.value: AristonEvoDevice,
     WheType.Lux2.value: AristonLux2Device,
     WheType.Lux.value: AristonLuxDevice,
 }
+
 
 class Ariston:
     """Ariston class"""
