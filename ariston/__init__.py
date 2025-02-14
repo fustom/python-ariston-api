@@ -2,13 +2,14 @@
 
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Type
 
 from ariston.lydos_device import AristonLydosDevice
 
 from .ariston_api import AristonAPI, ConnectionException
 from .const import (
     ARISTON_API_URL,
+    ARISTON_USER_AGENT,
     DeviceAttribute,
     SystemType,
     VelisDeviceAttribute,
@@ -23,10 +24,11 @@ from .galevo_device import AristonGalevoDevice
 from .lydos_hybrid_device import AristonLydosHybridDevice
 from .nuos_split_device import AristonNuosSplitDevice
 from .base_device import AristonBaseDevice
+from .velis_base_device import AristonVelisBaseDevice
 
 _LOGGER = logging.getLogger(__name__)
 
-_MAP_WHE_TYPES_TO_CLASS = {
+_MAP_WHE_TYPES_TO_CLASS: dict[int, Type[AristonVelisBaseDevice]] = {
     WheType.Evo.value: AristonEvoOneDevice,
     WheType.LydosHybrid.value: AristonLydosHybridDevice,
     WheType.Lydos.value: AristonLydosDevice,
@@ -46,17 +48,21 @@ class Ariston:
         self.cloud_devices: list[dict[str, Any]] = []
 
     async def async_connect(
-        self, username: str, password: str, api_url: str = ARISTON_API_URL
+        self,
+        username: str,
+        password: str,
+        api_url: str = ARISTON_API_URL,
+        user_agent: str = ARISTON_USER_AGENT,
     ) -> bool:
         """Connect to the ariston cloud"""
-        self.api = AristonAPI(username, password, api_url)
+        self.api = AristonAPI(username, password, api_url, user_agent)
         return await self.api.async_connect()
 
-    async def async_discover(self) -> Optional[list[dict[str, Any]]]:
+    async def async_discover(self) -> list[dict[str, Any]]:
         """Retreive ariston devices from the cloud"""
         if self.api is None:
             _LOGGER.exception("Call async_connect first")
-            return None
+            return []
         cloud_devices = await _async_discover(self.api)
         self.cloud_devices = cloud_devices
         return cloud_devices
@@ -119,10 +125,13 @@ def _get_device(
 
 
 def _connect(
-    username: str, password: str, api_url: str = ARISTON_API_URL
+    username: str,
+    password: str,
+    api_url: str = ARISTON_API_URL,
+    user_agent: str = ARISTON_USER_AGENT,
 ) -> AristonAPI:
     """Connect to ariston api"""
-    api = AristonAPI(username, password, api_url)
+    api = AristonAPI(username, password, api_url, user_agent)
     api.connect()
     return api
 
@@ -159,10 +168,13 @@ def hello(
 
 
 async def _async_connect(
-    username: str, password: str, api_url: str = ARISTON_API_URL
+    username: str,
+    password: str,
+    api_url: str = ARISTON_API_URL,
+    user_agent: str = ARISTON_USER_AGENT,
 ) -> AristonAPI:
     """Async connect to ariston api"""
-    api = AristonAPI(username, password, api_url)
+    api = AristonAPI(username, password, api_url, user_agent)
     if not await api.async_connect():
         raise ConnectionException
     return api
