@@ -1,6 +1,7 @@
 """Constants for ariston module"""
-from enum import Enum, IntEnum, unique
-from typing import Final
+
+from enum import Enum, IntEnum, StrEnum, unique
+from typing import Final, Any
 
 ARISTON_API_URL: Final[str] = "https://www.ariston-net.remotethermo.com/api/v2/"
 ARISTON_LOGIN: Final[str] = "accounts/login"
@@ -17,8 +18,18 @@ ARISTON_BUS_ERRORS: Final[str] = "busErrors"
 ARISTON_MENU_ITEMS: Final[str] = "menuItems"
 ARISTON_USER_AGENT: Final[str] = "RestSharp/106.11.7.0"
 
+
+class ExtendedStrEnum(StrEnum):
+    """Extended Enum class"""
+
+    @classmethod
+    def list(cls, zn: int) -> list[dict[str, Any]]:
+        """Return all enum values"""
+        return [{"id": c.value, "zn": zn} for c in cls]
+
+
 @unique
-class PlantData(str, Enum):
+class PlantData(StrEnum):
     """Plant data enum"""
 
     PD = "plantData"
@@ -52,6 +63,7 @@ class ZoneMode(Enum):
     MANUAL = 2
     TIME_PROGRAM = 3
 
+
 @unique
 class BsbZoneMode(Enum):
     """BSB zone mode enum"""
@@ -59,8 +71,9 @@ class BsbZoneMode(Enum):
     UNDEFINED = -1
     OFF = 0
     TIME_PROGRAM = 1
-    MANUAL = 2
-    MANUAL_NIGHT = 3
+    MANUAL_NIGHT = 2
+    MANUAL = 3
+
 
 @unique
 class DhwMode(Enum):
@@ -105,7 +118,7 @@ class GasEnergyUnit(IntEnum):
 
 @unique
 class GasType(IntEnum):
-    """Gas type enu,"""
+    """Gas type enum"""
 
     NATURAL_GAS = 0
     LPG = 1
@@ -166,7 +179,7 @@ class Brands(Enum):
 
 
 class WaterHeaterMode(Enum):
-    """Base class for plant modes"""
+    """Base class for water heater modes"""
 
 
 @unique
@@ -175,6 +188,7 @@ class BsbOperativeMode(WaterHeaterMode):
 
     OFF = 0
     ON = 1
+
 
 @unique
 class LuxPlantMode(WaterHeaterMode):
@@ -373,11 +387,14 @@ class DeviceFeatures:
     ZONES: Final[str] = "zones"
     WEATHER_PROVIDER: Final[str] = "weatherProvider"
 
+
 class VelisBaseDeviceProperties:
     """Contants for VelisBase device properties"""
+
     GW: Final[str] = "gw"
     MODE: Final[str] = "mode"
     ON: Final[str] = "on"
+
 
 class EvoOneDeviceProperties(VelisBaseDeviceProperties):
     """Contants for Velis Evo device properties"""
@@ -393,6 +410,7 @@ class EvoOneDeviceProperties(VelisBaseDeviceProperties):
     STATE: Final[str] = "state"
     TEMP: Final[str] = "temp"
     TM_P1: Final[str] = "tmP1"
+
 
 class VelisDeviceProperties(VelisBaseDeviceProperties):
     """Contants for Velis device properties"""
@@ -434,6 +452,7 @@ class LydosDeviceProperties(EvoLydosDeviceProperties):
 
     BOOST_REQ_TEMP: Final[str] = "boostReqTemp"
 
+
 class BsbDeviceProperties:
     """Constants for bsb device properties."""
 
@@ -472,7 +491,10 @@ class BsbZoneProperties:
     MODE: Final[str] = "mode"
     ROOM_TEMP: Final[str] = "roomTemp"
     ROOM_TEMP_ERROR: Final[str] = "roomTempError"
-    USE_REDUCED_OPERATION_MODE_ON_HOLIDAY: Final[str] = "useReducedOperationModeOnHoliday"
+    USE_REDUCED_OPERATION_MODE_ON_HOLIDAY: Final[str] = (
+        "useReducedOperationModeOnHoliday"
+    )
+
 
 class MedDeviceSettings:
     """Constatns for Med device settings"""
@@ -523,58 +545,58 @@ class SlpDeviceSettings:
     SLP_HC_HP_MODE: Final[str] = "SlpHcHpMode"
 
 
-class DeviceProperties:
+class DeviceProperties(ExtendedStrEnum):
     """Constants for device properties"""
 
-    PLANT_MODE: Final[str] = "PlantMode"
-    IS_FLAME_ON: Final[str] = "IsFlameOn"
-    IS_HEATING_PUMP_ON: Final[str] = "IsHeatingPumpOn"
-    HOLIDAY: Final[str] = "Holiday"
-    OUTSIDE_TEMP: Final[str] = "OutsideTemp"
-    WEATHER: Final[str] = "Weather"
-    HEATING_CIRCUIT_PRESSURE: Final[str] = "HeatingCircuitPressure"
-    CH_FLOW_TEMP: Final[str] = "ChFlowTemp"
-    CH_FLOW_SETPOINT_TEMP: Final[str] = "ChFlowSetpointTemp"
-    DHW_TEMP: Final[str] = "DhwTemp"
-    DHW_STORAGE_TEMPERATURE: Final[str] = "DhwStorageTemperature"
-    DHW_TIMEPROG_COMFORT_TEMP: Final[str] = "DhwTimeProgComfortTemp"
-    DHW_TIMEPROG_ECONOMY_TEMP: Final[str] = "DhwTimeProgEconomyTemp"
-    DHW_MODE: Final[str] = "DhwMode"
-    AUTOMATIC_THERMOREGULATION: Final[str] = "AutomaticThermoregulation"
-    ANTILEGIONELLA_ON_OFF: Final[str] = "AntilegionellaOnOff"
-    ANTILEGIONELLA_TEMP: Final[str] = "AntilegionellaTemp"
-    ANTILEGIONELLA_FREQ: Final[str] = "AntilegionellaFreq"
-    HYBRID_MODE: Final[str] = "HybridMode"
-    BUFFER_CONTROL_MODE: Final[str] = "BufferControlMode"
-    BUFFER_TIME_PROG_COMFORT_HEATING_TEMP: Final[str] = "BufferTimeProgComfortHeatingTemp"
-    BUFFER_TIME_PROG_ECONOMY_HEATING_TEMP: Final[str] = "BufferTimeProgEconomyHeatingTemp"
-    BUFFER_TIME_PROG_COMFORT_COOLING_TEMP: Final[str] = "BufferTimeProgComfortCoolingTemp"
-    BUFFER_TIME_PROG_ECONOMY_COOLING_TEMP: Final[str] = "BufferTimeProgEconomyCoolingTemp"
-    IS_QUIET: Final[str] = "IsQuite" # ariston misspelled IsQuiet
+    PLANT_MODE = "PlantMode"
+    IS_FLAME_ON = "IsFlameOn"
+    IS_HEATING_PUMP_ON = "IsHeatingPumpOn"
+    HOLIDAY = "Holiday"
+    OUTSIDE_TEMP = "OutsideTemp"
+    WEATHER = "Weather"
+    HEATING_CIRCUIT_PRESSURE = "HeatingCircuitPressure"
+    CH_FLOW_TEMP = "ChFlowTemp"
+    CH_FLOW_SETPOINT_TEMP = "ChFlowSetpointTemp"
+    DHW_TEMP = "DhwTemp"
+    DHW_STORAGE_TEMPERATURE = "DhwStorageTemperature"
+    DHW_TIMEPROG_COMFORT_TEMP = "DhwTimeProgComfortTemp"
+    DHW_TIMEPROG_ECONOMY_TEMP = "DhwTimeProgEconomyTemp"
+    DHW_MODE = "DhwMode"
+    AUTOMATIC_THERMOREGULATION = "AutomaticThermoregulation"
+    ANTILEGIONELLA_ON_OFF = "AntilegionellaOnOff"
+    ANTILEGIONELLA_TEMP = "AntilegionellaTemp"
+    ANTILEGIONELLA_FREQ = "AntilegionellaFreq"
+    HYBRID_MODE = "HybridMode"
+    BUFFER_CONTROL_MODE = "BufferControlMode"
+    BUFFER_TIME_PROG_COMFORT_HEATING_TEMP = "BufferTimeProgComfortHeatingTemp"
+    BUFFER_TIME_PROG_ECONOMY_HEATING_TEMP = "BufferTimeProgEconomyHeatingTemp"
+    BUFFER_TIME_PROG_COMFORT_COOLING_TEMP = "BufferTimeProgComfortCoolingTemp"
+    BUFFER_TIME_PROG_ECONOMY_COOLING_TEMP = "BufferTimeProgEconomyCoolingTemp"
+    IS_QUIET = "IsQuite"  # ariston misspelled IsQuiet
 
 
-class ThermostatProperties:
+class ThermostatProperties(ExtendedStrEnum):
     """Constants for thermostat properties"""
 
-    ZONE_MEASURED_TEMP: Final[str] = "ZoneMeasuredTemp"
-    ZONE_DESIRED_TEMP: Final[str] = "ZoneDesiredTemp"
-    ZONE_COMFORT_TEMP: Final[str] = "ZoneComfortTemp"
-    ZONE_MODE: Final[str] = "ZoneMode"
-    ZONE_HEAT_REQUEST: Final[str] = "ZoneHeatRequest"
-    ZONE_ECONOMY_TEMP: Final[str] = "ZoneEconomyTemp"
-    ZONE_DEROGA: Final[str] = "ZoneDeroga"
-    ZONE_IS_ZONE_PILOT_ON: Final[str] = "IsZonePilotOn"
-    ZONE_VIRT_TEMP_OFFSET_HEAT: Final[str] = "VirtTempOffsetHeat"
-    HEATING_FLOW_TEMP: Final[str] = "HeatingFlowTemp"
-    HEATING_FLOW_OFFSET: Final[str] = "HeatingFlowOffset"
-    COOLING_FLOW_TEMP: Final[str] = "CoolingFlowTemp"
-    COOLING_FLOW_OFFSET: Final[str] = "CoolingFlowOffset"
-    ZONE_NAME: Final[str] = "ZoneName"
-    VIRT_TEMP_SETPOINT_HEAT: Final[str] = "VirtTempSetpointHeat"
-    VIRT_TEMP_SETPOINT_COOL: Final[str] = "VirtTempSetpointCool"
-    VIRT_COMFORT_TEMP: Final[str] = "VirtComfortTemp"
-    VIRT_REDUCED_TEMP: Final[str] = "VirtReducedTemp"
-    ZONE_VIRT_TEMP_OFFSET_COOL: Final[str] = "VirtTempOffsetCool"
+    ZONE_MEASURED_TEMP = "ZoneMeasuredTemp"
+    ZONE_DESIRED_TEMP = "ZoneDesiredTemp"
+    ZONE_COMFORT_TEMP = "ZoneComfortTemp"
+    ZONE_MODE = "ZoneMode"
+    ZONE_HEAT_REQUEST = "ZoneHeatRequest"
+    ZONE_ECONOMY_TEMP = "ZoneEconomyTemp"
+    ZONE_DEROGA = "ZoneDeroga"
+    ZONE_IS_ZONE_PILOT_ON = "IsZonePilotOn"
+    ZONE_VIRT_TEMP_OFFSET_HEAT = "VirtTempOffsetHeat"
+    HEATING_FLOW_TEMP = "HeatingFlowTemp"
+    HEATING_FLOW_OFFSET = "HeatingFlowOffset"
+    COOLING_FLOW_TEMP = "CoolingFlowTemp"
+    COOLING_FLOW_OFFSET = "CoolingFlowOffset"
+    ZONE_NAME = "ZoneName"
+    VIRT_TEMP_SETPOINT_HEAT = "VirtTempSetpointHeat"
+    VIRT_TEMP_SETPOINT_COOL = "VirtTempSetpointCool"
+    VIRT_COMFORT_TEMP = "VirtComfortTemp"
+    VIRT_REDUCED_TEMP = "VirtReducedTemp"
+    ZONE_VIRT_TEMP_OFFSET_COOL = "VirtTempOffsetCool"
 
 
 class ConsumptionProperties:
@@ -602,8 +624,10 @@ class PropertyType:
     EXPIRES_ON: Final[str] = "expiresOn"
     ALLOWED_OPTIONS: Final[str] = "allowedOptions"
 
+
 class BusErrorsProperties:
     """Constants for bus errors properties"""
+
     GW: Final[str] = "gw"
     TIMESTAMP: Final[str] = "timestamp"
     FAULT: Final[str] = "fault"
@@ -614,10 +638,14 @@ class BusErrorsProperties:
     RES: Final[str] = "res"
     BLK: Final[str] = "blk"
 
-class MenuItemNames:
-    """Constants for menu items"""
-    CH_RETURN_TEMP: Final[int] = 124
-    SIGNAL_STRENGTH: Final[int] = 119
 
-    def __str__(self):
-        return ','.join([str(getattr(self, names)) for names in dir(self) if not names.startswith("__")])
+class MenuItemNames(IntEnum):
+    """Constants for menu items"""
+
+    CH_RETURN_TEMP = 124
+    SIGNAL_STRENGTH = 119
+
+    @classmethod
+    def values(cls) -> str:
+        """Return all menu items values"""
+        return ",".join(str(c.value) for c in cls)

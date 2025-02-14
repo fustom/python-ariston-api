@@ -1,4 +1,5 @@
 """Ariston API"""
+
 from __future__ import annotations
 
 import logging
@@ -33,7 +34,7 @@ from .const import (
     ThermostatProperties,
     WaterHeaterMode,
     ZoneAttribute,
-    MenuItemNames
+    MenuItemNames,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,7 +47,13 @@ class ConnectionException(Exception):
 class AristonAPI:
     """Ariston API class"""
 
-    def __init__(self, username: str, password: str, api_url: str = ARISTON_API_URL, user_agent: str = ARISTON_USER_AGENT) -> None:
+    def __init__(
+        self,
+        username: str,
+        password: str,
+        api_url: str = ARISTON_API_URL,
+        user_agent: str = ARISTON_USER_AGENT,
+    ) -> None:
         """Constructor for Ariston API."""
         self.__username = username
         self.__password = password
@@ -147,24 +154,9 @@ class AristonAPI:
     @staticmethod
     def get_items(features: dict[str, Any]) -> list[dict[str, int]]:
         """Get the Final[str] strings from DeviceProperies and ThermostatProperties"""
-        device_props = [
-            getattr(DeviceProperties, device_property)
-            for device_property in dir(DeviceProperties)
-            if not device_property.startswith("__")
-        ]
-        thermostat_props = [
-            getattr(ThermostatProperties, thermostat_properties)
-            for thermostat_properties in dir(ThermostatProperties)
-            if not thermostat_properties.startswith("__")
-        ]
-
-        items: list[dict[str, int]] = list()
-        for device_prop in device_props:
-            items.append({"id": device_prop, "zn": 0})
-
+        items: list[dict[str, Any]] = DeviceProperties.list(0)
         for zone in features[DeviceFeatures.ZONES]:
-            for thermostat_prop in thermostat_props:
-                items.append({"id": thermostat_prop, "zn": zone[ZoneAttribute.NUM]})
+            items.extend(ThermostatProperties.list(zone[ZoneAttribute.NUM]))
         return items
 
     def get_properties(
@@ -186,7 +178,9 @@ class AristonAPI:
 
     def get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
         """Get BSB plant data."""
-        data = self._get(f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}")
+        data = self._get(
+            f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}"
+        )
         if data is not None:
             return data
         return dict()
@@ -212,7 +206,7 @@ class AristonAPI:
     def get_menu_items(self, gw_id: str) -> list[dict[str, Any]]:
         """Get menu items"""
         items = self._get(
-            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={MenuItemNames()}"
+            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={MenuItemNames.values()}"
         )
         if items is not None:
             return items
@@ -289,14 +283,18 @@ class AristonAPI:
             },
         )
 
-    def set_bsb_zone_mode(self, gw_id: str, zone: int, value: BsbZoneMode, old_value: BsbZoneMode, is_cooling: bool) -> None:
+    def set_bsb_zone_mode(
+        self,
+        gw_id: str,
+        zone: int,
+        value: BsbZoneMode,
+        old_value: BsbZoneMode,
+        is_cooling: bool,
+    ) -> None:
         """Set Bsb zone mode"""
         self._post(
             f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/mode?isCooling={is_cooling}",
-            {
-                "new": value.value,
-                "old": old_value.value
-            },
+            {"new": value.value, "old": old_value.value},
         )
 
     def set_evo_temperature(self, gw_id: str, value: float) -> None:
@@ -317,7 +315,14 @@ class AristonAPI:
             },
         )
 
-    def set_nuos_temperature(self, gw_id: str, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float]) -> None:
+    def set_nuos_temperature(
+        self,
+        gw_id: str,
+        comfort: float,
+        reduced: float,
+        old_comfort: Optional[float],
+        old_reduced: Optional[float],
+    ) -> None:
         """Set Nuos temperature"""
         self._post(
             f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/temperatures",
@@ -329,11 +334,18 @@ class AristonAPI:
                 "old": {
                     "comfort": old_comfort,
                     "reduced": old_reduced,
-                }
+                },
             },
         )
 
-    def set_bsb_temperature(self, gw_id: str, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float]) -> None:
+    def set_bsb_temperature(
+        self,
+        gw_id: str,
+        comfort: float,
+        reduced: float,
+        old_comfort: Optional[float],
+        old_reduced: Optional[float],
+    ) -> None:
         """Set Bsb temperature"""
         self._post(
             f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.Bsb.value}/{gw_id}/dhwTemp",
@@ -345,12 +357,19 @@ class AristonAPI:
                 "old": {
                     "comf": old_comfort,
                     "econ": old_reduced,
-                }
+                },
             },
         )
 
     def set_bsb_zone_temperature(
-        self, gw_id: str, zone: int, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float], is_cooling: bool
+        self,
+        gw_id: str,
+        zone: int,
+        comfort: float,
+        reduced: float,
+        old_comfort: Optional[float],
+        old_reduced: Optional[float],
+        is_cooling: bool,
     ) -> None:
         """Set Bsb zone temperature"""
         self._post(
@@ -363,7 +382,7 @@ class AristonAPI:
                 "old": {
                     "comf": old_comfort,
                     "econ": old_reduced,
-                }
+                },
             },
         )
 
@@ -435,7 +454,9 @@ class AristonAPI:
 
     def get_bus_errors(self, gw_id: str) -> list[Any]:
         """Get bus errors"""
-        bus_errors = self._get(f"{self.__api_url}{ARISTON_BUS_ERRORS}?gatewayId={gw_id}&blockingOnly=False&culture=en-US")
+        bus_errors = self._get(
+            f"{self.__api_url}{ARISTON_BUS_ERRORS}?gatewayId={gw_id}&blockingOnly=False&culture=en-US"
+        )
         if bus_errors is not None:
             return list(bus_errors)
         return []
@@ -449,7 +470,10 @@ class AristonAPI:
         is_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Request with requests"""
-        headers = {"User-Agent": self.__user_agent, "ar.authToken": self.__token}
+        headers: dict[str, Any] = {
+            "User-Agent": self.__user_agent,
+            "ar.authToken": self.__token,
+        }
 
         _LOGGER.debug(
             "Request method %s, path: %s, params: %s",
@@ -466,18 +490,18 @@ class AristonAPI:
                     if not is_retry:
                         if self.connect():
                             return self.__request(method, path, params, body, True)
-                        raise Exception("Login failed (password changed?)")
-                    raise Exception("Invalid token")
+                        raise ConnectionException("Login failed (password changed?)")
+                    raise ConnectionException("Invalid token")
                 case 404:
                     return None
                 case 429:
                     content = response.content.decode()
-                    raise Exception(response.status_code, content)
+                    raise ConnectionException(response.status_code, content)
                 case _:
                     if not is_retry:
                         time.sleep(5)
                         return self.__request(method, path, params, body, True)
-                    raise Exception(response.status_code)
+                    raise ConnectionException(response.status_code)
 
         if len(response.content) > 0:
             json = response.json()
@@ -490,9 +514,7 @@ class AristonAPI:
         """POST request"""
         return self.__request("POST", path, None, body)
 
-    def _get(
-        self, path: str, params: Optional[dict[str, Any]] = None
-    ) -> Any:
+    def _get(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
         """GET request"""
         return self.__request("GET", path, params, None)
 
@@ -642,7 +664,7 @@ class AristonAPI:
     async def async_get_menu_items(self, gw_id: str) -> list[dict[str, Any]]:
         """Async get menu items"""
         items = await self._async_get(
-            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={MenuItemNames()}"
+            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={MenuItemNames.values()}"
         )
         if items is not None:
             return items
@@ -674,7 +696,9 @@ class AristonAPI:
             },
         )
 
-    async def async_set_evo_number_of_showers(self, gw_id: str, number_of_showers: int) -> None:
+    async def async_set_evo_number_of_showers(
+        self, gw_id: str, number_of_showers: int
+    ) -> None:
         """Set Velis Evo number of showers"""
         await self._async_post(
             f"{self.__api_url}{ARISTON_VELIS}/{PlantData.PD.value}/{gw_id}/showers",
@@ -722,15 +746,17 @@ class AristonAPI:
         )
 
     async def async_set_bsb_zone_mode(
-        self, gw_id: str, zone: int, value: BsbZoneMode, old_value: BsbZoneMode, is_cooling: bool
+        self,
+        gw_id: str,
+        zone: int,
+        value: BsbZoneMode,
+        old_value: BsbZoneMode,
+        is_cooling: bool,
     ) -> None:
         """Async set Bsb zone mode"""
         await self._async_post(
             f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_BSB_ZONES}/{gw_id}/{zone}/mode?isCooling={is_cooling}",
-            {
-                "new": value.value,
-                "old": old_value.value
-            },
+            {"new": value.value, "old": old_value.value},
         )
 
     async def async_set_evo_temperature(self, gw_id: str, value: float) -> None:
@@ -752,7 +778,12 @@ class AristonAPI:
         )
 
     async def async_set_nuos_temperature(
-        self, gw_id: str, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float]
+        self,
+        gw_id: str,
+        comfort: float,
+        reduced: float,
+        old_comfort: Optional[float],
+        old_reduced: Optional[float],
     ) -> None:
         """Async set Velis Lydos temperature"""
         await self._async_post(
@@ -765,12 +796,17 @@ class AristonAPI:
                 "old": {
                     "comfort": old_comfort,
                     "reduced": old_reduced,
-                }
+                },
             },
         )
 
     async def async_set_bsb_temperature(
-        self, gw_id: str, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float]
+        self,
+        gw_id: str,
+        comfort: float,
+        reduced: float,
+        old_comfort: Optional[float],
+        old_reduced: Optional[float],
     ) -> None:
         """Async set Bsb temperature"""
         await self._async_post(
@@ -783,12 +819,19 @@ class AristonAPI:
                 "old": {
                     "comf": old_comfort,
                     "econ": old_reduced,
-                }
+                },
             },
         )
 
     async def async_set_bsb_zone_temperature(
-        self, gw_id: str, zone: int, comfort: float, reduced: float, old_comfort: Optional[float], old_reduced: Optional[float], is_cooling: bool
+        self,
+        gw_id: str,
+        zone: int,
+        comfort: float,
+        reduced: float,
+        old_comfort: Optional[float],
+        old_reduced: Optional[float],
+        is_cooling: bool,
     ) -> None:
         """Async set Bsb zone temperature"""
         await self._async_post(
@@ -801,7 +844,7 @@ class AristonAPI:
                 "old": {
                     "comf": old_comfort,
                     "econ": old_reduced,
-                }
+                },
             },
         )
 
@@ -873,7 +916,9 @@ class AristonAPI:
 
     async def async_get_bus_errors(self, gw_id: str) -> list[Any]:
         """Async get bus errors"""
-        bus_errors = await self._async_get(f"{self.__api_url}{ARISTON_BUS_ERRORS}?gatewayId={gw_id}&blockingOnly=False&culture=en-US")
+        bus_errors = await self._async_get(
+            f"{self.__api_url}{ARISTON_BUS_ERRORS}?gatewayId={gw_id}&blockingOnly=False&culture=en-US"
+        )
         if bus_errors is not None:
             return list(bus_errors)
         return []
@@ -887,7 +932,10 @@ class AristonAPI:
         is_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Async request with aiohttp"""
-        headers = {"User-Agent": self.__user_agent, "ar.authToken": self.__token}
+        headers: dict[str, Any] = {
+            "User-Agent": self.__user_agent,
+            "ar.authToken": self.__token,
+        }
 
         _LOGGER.debug(
             "Request method %s, path: %s, params: %s",
@@ -909,20 +957,22 @@ class AristonAPI:
                                 return await self.__async_request(
                                     method, path, params, body, True
                                 )
-                            raise Exception("Login failed (password changed?)")
-                        raise Exception("Invalid token")
+                            raise ConnectionException(
+                                "Login failed (password changed?)"
+                            )
+                        raise ConnectionException("Invalid token")
                     case 404:
                         return None
                     case 429:
                         content = await response.content.read()
-                        raise Exception(response.status, content)
+                        raise ConnectionException(response.status, content)
                     case _:
                         if not is_retry:
                             await asyncio.sleep(5)
                             return await self.__async_request(
                                 method, path, params, body, True
                             )
-                        raise Exception(response.status)
+                        raise ConnectionException(response.status)
 
             if response.content_length and response.content_length > 0:
                 json = await response.json()
