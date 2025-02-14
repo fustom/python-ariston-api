@@ -4,8 +4,6 @@ import asyncio
 import logging
 from typing import Any, Optional, Type
 
-from ariston.lydos_device import AristonLydosDevice
-
 from .ariston_api import AristonAPI, ConnectionException
 from .const import (
     ARISTON_API_URL,
@@ -25,6 +23,7 @@ from .lydos_hybrid_device import AristonLydosHybridDevice
 from .nuos_split_device import AristonNuosSplitDevice
 from .base_device import AristonBaseDevice
 from .velis_base_device import AristonVelisBaseDevice
+from .lydos_device import AristonLydosDevice
 
 _LOGGER = logging.getLogger(__name__)
 
