@@ -36,7 +36,7 @@ class AristonLuxDevice(AristonEvoDevice):
     @property
     def water_heater_target_temperature(self) -> Optional[float]:
         """Get water heater target temperature"""
-        if self.data.get(EvoDeviceProperties.MODE) == LuxPlantMode.BOOST:
+        if self.data.get(EvoDeviceProperties.MODE) == LuxPlantMode.BOOST.value:
             return self.water_heater_maximum_setpoint_temperature_maximum
         else:
             return self.data.get(EvoLydosDeviceProperties.REQ_TEMP, None)
