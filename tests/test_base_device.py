@@ -77,17 +77,17 @@ class AristonBaseDeviceTests(unittest.TestCase):
         device = self.make_device()
         expected = {DeviceFeatures.HAS_METERING: True}
         device.api.get_features_for_device.return_value = expected
-        device.get_features()
+        AristonBaseDevice.get_features(device)
         device.api.get_features_for_device.assert_called_once_with("gw-1")
         self.assertEqual(device.features, expected)
 
         device.api.async_get_features_for_device = AsyncMock(return_value=None)
-        asyncio.run(device.async_get_features())
+        asyncio.run(AristonBaseDevice.async_get_features(device))
         device.api.async_get_features_for_device.assert_awaited_once_with("gw-1")
         self.assertEqual(device.features, expected)
 
         device.api.async_get_features_for_device = AsyncMock(return_value={"new": 1})
-        asyncio.run(device.async_get_features())
+        asyncio.run(AristonBaseDevice.async_get_features(device))
         self.assertEqual(device.features, {"new": 1})
 
     def test_consumption_accessors_select_the_last_sample_for_each_type(self):
