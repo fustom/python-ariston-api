@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Optional
 
 from .velis_device import AristonVelisDevice
@@ -111,6 +112,26 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     def water_heater_mode_value(self) -> Optional[int]:
         """Get water heater mode value"""
         return self.data.get(NuosSplitProperties.OP_MODE, None)
+
+    @property
+    def holiday_end_date(self) -> Optional[str]:
+        """Get the holiday end date.
+
+        Returns the ISO-formatted end date the cloud has on file
+        (e.g. ``"2026-08-15T00:00:00"``) when a holiday is scheduled, or
+        ``None`` when no holiday is active.
+        """
+        return self.data.get(NuosSplitProperties.HOLIDAY_UNTIL, None)
+
+    @property
+    def holiday_active(self) -> bool:
+        """Whether a holiday is currently scheduled.
+
+        The Slp payload does not expose a dedicated boolean: an active
+        holiday is signalled by `holidayUntil` being a non-null string,
+        and an inactive holiday by `holidayUntil` being ``null``.
+        """
+        return self.data.get(NuosSplitProperties.HOLIDAY_UNTIL) is not None
 
     def set_water_heater_boost(self, boost: bool):
         """Set water heater boost"""
@@ -257,3 +278,36 @@ class AristonNuosSplitDevice(AristonVelisDevice):
             self.plant_settings[SlpDeviceSettings.SLP_HEATING_RATE],
         )
         self.plant_settings[SlpDeviceSettings.SLP_HEATING_RATE] = heating_rate
+
+    @staticmethod
+    def _create_holiday_end_date(holiday_end: Optional[date]) -> Optional[str]:
+        """Format a holiday end date for the cloud payload.
+
+        Returns ``None`` when ``holiday_end`` is ``None``, which the cloud
+        interprets as "clear the holiday".
+        """
+        return (
+            None
+            if holiday_end is None
+            else holiday_end.strftime("%Y-%m-%dT00:00:00")
+        )
+
+    def set_holiday(self, holiday_end: Optional[date]) -> None:
+        """Set or clear the holiday on this Nuos device.
+
+        Pass a ``datetime.date`` to schedule the holiday end, or ``None`` to
+        clear an active holiday.
+        """
+        holiday_end_date = self._create_holiday_end_date(holiday_end)
+        self.api.set_velis_slp_holiday(self.gw, holiday_end_date)
+        self.data[NuosSplitProperties.HOLIDAY_UNTIL] = holiday_end_date
+
+    async def async_set_holiday(self, holiday_end: Optional[date]) -> None:
+        """Async set or clear the holiday on this Nuos device.
+
+        Pass a ``datetime.date`` to schedule the holiday end, or ``None`` to
+        clear an active holiday.
+        """
+        holiday_end_date = self._create_holiday_end_date(holiday_end)
+        await self.api.async_set_velis_slp_holiday(self.gw, holiday_end_date)
+        self.data[NuosSplitProperties.HOLIDAY_UNTIL] = holiday_end_date

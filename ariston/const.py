@@ -427,6 +427,7 @@ class NuosSplitProperties(VelisDeviceProperties):
     OP_MODE: Final[str] = "opMode"
     BOOST_ON: Final[str] = "boostOn"
     HP_STATE: Final[str] = "hpState"
+    HOLIDAY_UNTIL: Final[str] = "holidayUntil"
 
 
 class EvoLydosDeviceProperties(VelisDeviceProperties):
