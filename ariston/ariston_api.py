@@ -452,6 +452,23 @@ class AristonAPI:
             },
         )
 
+    def set_velis_slp_holiday(
+        self,
+        gw_id: str,
+        holiday_end_date: Optional[str],
+    ) -> None:
+        """Set holiday on a Velis Slp (Nuos) device.
+
+        Pass an ISO-formatted end date string to schedule the holiday, or
+        ``None`` to clear it.
+        """
+        self._post(
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/holiday",
+            {
+                "new": holiday_end_date,
+            },
+        )
+
     def get_bus_errors(self, gw_id: str) -> list[Any]:
         """Get bus errors"""
         bus_errors = self._get(
@@ -909,6 +926,23 @@ class AristonAPI:
 
         await self._async_post(
             f"{self.__api_url}{ARISTON_REMOTE}/{PlantData.PD}/{gw_id}/holiday",
+            {
+                "new": holiday_end_date,
+            },
+        )
+
+    async def async_set_velis_slp_holiday(
+        self,
+        gw_id: str,
+        holiday_end_date: Optional[str],
+    ) -> None:
+        """Async set holiday on a Velis Slp (Nuos) device.
+
+        Pass an ISO-formatted end date string to schedule the holiday, or
+        ``None`` to clear it.
+        """
+        await self._async_post(
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/holiday",
             {
                 "new": holiday_end_date,
             },
