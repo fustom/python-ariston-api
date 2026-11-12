@@ -298,6 +298,11 @@ class AristonAPIRequestTests(unittest.TestCase):
         payload = [{"sample": "value"}]
 
         async def exercise(name, args, response, empty):
+            transport = (
+                "_async_post"
+                if name in {"async_get_consumptions_settings", "async_get_properties"}
+                else "_async_get"
+            )
             if empty is None:
                 expected_nonempty = response
             elif isinstance(empty, list):
@@ -305,7 +310,7 @@ class AristonAPIRequestTests(unittest.TestCase):
             else:
                 expected_nonempty = response
             for value, expected in ((response, expected_nonempty), (None, empty)):
-                with patch.object(api, "_async_get", new=AsyncMock(return_value=value)) as request:
+                with patch.object(api, transport, new=AsyncMock(return_value=value)) as request:
                     result = await getattr(api, name)(*args)
                 self.assertEqual(result, expected)
                 self.assertIn(next(path for method, method_args, path, _, _ in endpoints if method == name), request.await_args.args[0])

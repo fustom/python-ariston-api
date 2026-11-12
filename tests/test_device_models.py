@@ -149,7 +149,7 @@ class AristonDeviceModelTests(unittest.TestCase):
         device.api.async_set_evo_number_of_showers.assert_awaited_once_with("gw-1", 2)
 
     def test_velis_update_settings_power_and_antilegionella(self):
-        device = self.make_device(AristonEvoOneDevice)
+        device = self.make_device(AristonEvoDevice)
         device.api.get_features_for_device.return_value = {"feature": True}
         device.api.get_velis_plant_data.return_value = {"state": "ready"}
         device.api.get_velis_plant_settings.return_value = {
@@ -374,7 +374,12 @@ class AristonDeviceModelTests(unittest.TestCase):
         for sync_name, async_name, value in operations:
             with self.subTest(command=sync_name):
                 getattr(device, sync_name)(value)
-                self.assertIsNotNone(device.api.set_velis_plant_setting.call_args)
+                if sync_name == "set_water_heater_operation_mode":
+                    self.assertTrue(device.api.set_lydos_mode.called)
+                elif sync_name == "set_water_heater_temperature":
+                    self.assertTrue(device.api.set_lydos_temperature.called)
+                else:
+                    self.assertTrue(device.api.set_velis_plant_setting.called)
 
         async_methods = (
             "async_set_lydos_mode",
