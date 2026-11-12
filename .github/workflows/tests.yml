@@ -1,0 +1,27 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install locked dependencies
+        env:
+          PIP_CONFIG_FILE: "${{ github.workspace }}/pip.conf"
+        run: python -m pip install --require-hashes -r requirements.txt
+      - name: Run unit tests
+        run: python -m coverage run --source=ariston -m unittest discover --start-directory tests --verbose
+      - name: Report coverage
+        run: python -m coverage report --show-missing --fail-under=90
