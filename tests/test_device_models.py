@@ -5,6 +5,8 @@ import unittest
 from unittest.mock import AsyncMock, Mock
 
 from ariston.const import (
+    ConsumptionTimeInterval,
+    ConsumptionType,
     DeviceAttribute,
     EvoDeviceProperties,
     EvoLydosDeviceProperties,
@@ -29,6 +31,7 @@ from ariston.lux_device import AristonLuxDevice
 from ariston.lydos_device import AristonLydosDevice
 from ariston.lydos_hybrid_device import AristonLydosHybridDevice
 from ariston.nuos_split_device import AristonNuosSplitDevice
+from ariston.velis_device import AristonVelisDevice
 
 
 class AristonDeviceModelTests(unittest.TestCase):
@@ -70,6 +73,9 @@ class AristonDeviceModelTests(unittest.TestCase):
         self.assertEqual(device.water_heater_maximum_setpoint_temperature_minimum, 40)
         self.assertEqual(device.water_heater_maximum_setpoint_temperature_maximum, 80)
         self.assertEqual(device.water_heater_mode, EvoPlantMode)
+        self.assertEqual(device.consumption_type, "Dhw")
+        device.data.pop(EvoDeviceProperties.RM_TM)
+        self.assertEqual(device.rm_tm_in_minutes, -1)
 
         device.set_eco_mode(False)
         device.set_water_heater_operation_mode("MANUAL")
@@ -115,9 +121,12 @@ class AristonDeviceModelTests(unittest.TestCase):
         )
 
         self.assertEqual(device.water_heater_current_temperature, 46)
+        self.assertEqual(device.consumption_type, "Dhw")
         self.assertEqual(device.av_shw_value, 3)
         self.assertEqual(device.water_heater_eco_value, 1)
         self.assertEqual(device.rm_tm_in_minutes, 45)
+        device.data.pop(EvoOneDeviceProperties.RM_TM)
+        self.assertEqual(device.rm_tm_in_minutes, -1)
         self.assertTrue(device.is_heating)
         self.assertEqual(device.max_req_shower, "3")
         self.assertEqual(device.req_shower, "2")
@@ -151,7 +160,10 @@ class AristonDeviceModelTests(unittest.TestCase):
     def test_velis_update_settings_power_and_antilegionella(self):
         device = self.make_device(AristonEvoDevice)
         device.api.get_features_for_device.return_value = {"feature": True}
-        device.api.get_velis_plant_data.return_value = {"state": "ready"}
+        device.api.get_velis_plant_data.return_value = {
+            "state": "ready",
+            VelisDeviceProperties.PROC_REQ_TEMP: 53,
+        }
         device.api.get_velis_plant_settings.return_value = {
             MedDeviceSettings.MED_ANTILEGIONELLA_ON_OFF: True,
             MedDeviceSettings.MED_MAX_SETPOINT_TEMPERATURE: 75,
@@ -160,8 +172,9 @@ class AristonDeviceModelTests(unittest.TestCase):
         device.update_state()
         self.assertTrue(device.custom_features["hasDhw"])
         self.assertTrue(device.features["dhwModeChangeable"])
-        self.assertEqual(device.data, {"state": "ready"})
+        self.assertEqual(device.data, {"state": "ready", VelisDeviceProperties.PROC_REQ_TEMP: 53})
         self.assertTrue(device.water_anti_leg_value)
+        self.assertEqual(device.proc_req_temp_value, 53)
         self.assertEqual(device.water_heater_maximum_setpoint_temperature, 75)
         self.assertEqual(device.water_heater_maximum_temperature, 75)
         self.assertEqual(device.water_heater_minimum_temperature, 40)
@@ -198,6 +211,14 @@ class AristonDeviceModelTests(unittest.TestCase):
         self.assertEqual(device.plant_settings[MedDeviceSettings.MED_MAX_SETPOINT_TEMPERATURE], 72)
         device.api.async_set_velis_power.assert_awaited_once()
         self.assertEqual(device.water_heater_mode_operation_texts, [mode.name for mode in EvoPlantMode])
+        for property_name in (
+            "water_heater_maximum_setpoint_temperature_minimum",
+            "water_heater_maximum_setpoint_temperature_maximum",
+        ):
+            with self.subTest(abstract_property=property_name):
+                property_getter = getattr(AristonVelisDevice, property_name).fget
+                with self.assertRaises(NotImplementedError):
+                    property_getter(device)
 
     def test_lux_lux2_and_lydos_special_modes_and_power_option(self):
         lux = self.make_device(
@@ -209,6 +230,7 @@ class AristonDeviceModelTests(unittest.TestCase):
         )
         lux.plant_settings[MedDeviceSettings.MED_MAX_SETPOINT_TEMPERATURE_MAX] = 78
         self.assertEqual(lux.water_heater_target_temperature, 78)
+        self.assertEqual(lux.water_heater_mode, LuxPlantMode)
         lux.data[EvoDeviceProperties.MODE] = LuxPlantMode.MANUAL.value
         self.assertEqual(lux.water_heater_target_temperature, 52)
         lux.set_water_heater_operation_mode("BOOST")
@@ -269,6 +291,10 @@ class AristonDeviceModelTests(unittest.TestCase):
         self.assertEqual(device.water_heater_heating_rate, 46)
         self.assertTrue(device.water_heater_boost)
         self.assertEqual(device.water_heater_mode_value, NuosSplitOperativeMode.COMFORT.value)
+        self.assertEqual(device.consumption_type, "DhwHeatingPumpElec%2CDhwResistorElec")
+        self.assertEqual(device.anti_legionella_on_off, SlpDeviceSettings.SLP_ANTILEGIONELLA_ON_OFF)
+        self.assertEqual(device.max_setpoint_temp, SlpDeviceSettings.SLP_MAX_SETPOINT_TEMPERATURE)
+        self.assertEqual(device.water_heater_mode, NuosSplitOperativeMode)
 
         device.set_water_heater_boost(False)
         device.set_water_heater_temperature(60)
@@ -317,6 +343,23 @@ class AristonDeviceModelTests(unittest.TestCase):
             (40.0, 37),
         )
 
+        missing_temperature = self.make_device(AristonNuosSplitDevice)
+        missing_temperature.api.get_velis_plant_data.return_value = {}
+        missing_temperature.set_water_heater_temperature(59)
+        self.assertEqual(
+            missing_temperature.api.set_nuos_temperature.call_args.args[1:3],
+            (59, 0),
+        )
+
+        async_missing_temperature = self.make_device(AristonNuosSplitDevice)
+        async_missing_temperature.api.async_get_velis_plant_data = AsyncMock(return_value={})
+        async_missing_temperature.api.async_set_nuos_temperature = AsyncMock()
+        asyncio.run(async_missing_temperature.async_set_water_heater_temperature(61))
+        self.assertEqual(
+            async_missing_temperature.api.async_set_nuos_temperature.await_args.args[1:3],
+            (61, 0),
+        )
+
     def test_lydos_hybrid_settings_accessors_and_all_commands(self):
         setting_keys = (
             SeDeviceSettings.SE_MAX_SETPOINT_TEMPERATURE_MIN,
@@ -360,6 +403,15 @@ class AristonDeviceModelTests(unittest.TestCase):
                 self.assertEqual(getattr(device, property_name), 1)
         self.assertEqual(device.water_heater_mode, LydosPlantMode)
         self.assertEqual(device.plant_data.value, "sePlantData")
+        self.assertEqual(device.anti_legionella_on_off, SeDeviceSettings.SE_ANTILEGIONELLA_ON_OFF)
+        self.assertEqual(device.consumption_type, "DhwHeatingPumpElec%2CDhwResistorElec")
+        self.assertEqual(device.max_setpoint_temp, SeDeviceSettings.SE_MAX_SETPOINT_TEMPERATURE)
+        device.consumptions_sequences = [{
+            "k": ConsumptionType.DOMESTIC_HOT_WATER_HEATING_PUMP_ELECTRICITY.value,
+            "p": ConsumptionTimeInterval.LAST_DAY.value,
+            "v": [3, 8],
+        }]
+        self.assertEqual(device.electric_consumption_for_water_last_two_hours, 8)
 
         operations = (
             ("set_water_heater_operation_mode", "async_set_water_heater_operation_mode", "BOOST"),

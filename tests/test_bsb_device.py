@@ -216,6 +216,70 @@ class AristonBsbDeviceTests(unittest.TestCase):
             14,
         )
 
+    def test_dhw_and_zone_setters_load_empty_state_and_apply_zero_fallbacks(self):
+        sparse_data = self.make_data()
+        sparse_data.pop(BsbDeviceProperties.DHW_TEMP)
+        sparse_data[BsbDeviceProperties.DHW_REDU_TEMP].pop(PropertyType.VALUE)
+
+        sync_temperature = self.make_device({})
+        sync_temperature.api.get_bsb_plant_data.return_value = sparse_data
+        sync_temperature.set_water_heater_temperature(53)
+        self.assertEqual(
+            sync_temperature.api.set_bsb_temperature.call_args.args[1:3],
+            (53, 0),
+        )
+
+        sync_reduced = self.make_device({})
+        sync_reduced.api.get_bsb_plant_data.return_value = self.make_data()
+        sync_reduced.data = {}
+        sync_reduced.api.get_bsb_plant_data.return_value.pop(BsbDeviceProperties.DHW_TEMP)
+        sync_reduced.set_water_heater_reduced_temperature(39)
+        self.assertEqual(
+            sync_reduced.api.set_bsb_temperature.call_args.args[1:3],
+            (0, 39),
+        )
+
+        sync_zone_reduced = self.make_device({})
+        sync_zone_reduced.api.get_bsb_plant_data.return_value = self.make_data()
+        sync_zone_reduced.set_reduced_temp(13, 1)
+        self.assertEqual(
+            sync_zone_reduced.api.set_bsb_zone_temperature.call_args.args[2:4],
+            (21, 13),
+        )
+
+        async_temperature = self.make_device({})
+        async_sparse_data = self.make_data()
+        async_sparse_data.pop(BsbDeviceProperties.DHW_TEMP)
+        async_sparse_data[BsbDeviceProperties.DHW_REDU_TEMP].pop(PropertyType.VALUE)
+        async_temperature.api.async_get_bsb_plant_data = AsyncMock(return_value=async_sparse_data)
+        async_temperature.api.async_set_bsb_temperature = AsyncMock()
+        async_reduced = self.make_device({})
+        async_reduced_data = self.make_data()
+        async_reduced_data.pop(BsbDeviceProperties.DHW_TEMP)
+        async_reduced.api.async_get_bsb_plant_data = AsyncMock(return_value=async_reduced_data)
+        async_reduced.api.async_set_bsb_temperature = AsyncMock()
+        async_zone_comfort = self.make_device({})
+        async_zone_comfort.api.async_get_bsb_plant_data = AsyncMock(return_value=self.make_data())
+        async_zone_comfort.api.async_set_bsb_zone_temperature = AsyncMock()
+
+        async def set_after_load():
+            await async_temperature.async_set_water_heater_temperature(52)
+            await async_reduced.async_set_water_heater_reduced_temperature(38)
+            await async_zone_comfort.async_set_comfort_temp(22, 1)
+
+        asyncio.run(set_after_load())
+        async_temperature.api.async_set_bsb_temperature.assert_awaited_once()
+        self.assertEqual(
+            async_temperature.api.async_set_bsb_temperature.await_args.args[1:3],
+            (52, 0),
+        )
+        self.assertEqual(
+            async_reduced.api.async_set_bsb_temperature.await_args.args[1:3],
+            (0, 38),
+        )
+        async_zone_comfort.api.async_get_bsb_plant_data.assert_awaited_once_with("gw-1")
+        async_zone_comfort.api.async_set_bsb_zone_temperature.assert_awaited_once()
+
 
 if __name__ == "__main__":
     unittest.main()

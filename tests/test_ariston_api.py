@@ -56,6 +56,20 @@ class FakeAsyncSession:
         return self.response
 
 
+class FakeAsyncContent:
+    def __init__(self, payload):
+        self.payload = payload
+
+    async def read(self):
+        return self.payload
+
+
+class FakeAsyncRateLimitedResponse(FakeAsyncResponse):
+    def __init__(self):
+        super().__init__(status_code=429, content=b"rate limited")
+        self.content = FakeAsyncContent(b"rate limited")
+
+
 class AristonAPIRequestTests(unittest.TestCase):
     def test_login_token_is_sent_with_followup_request(self):
         api = AristonAPI(
@@ -276,6 +290,28 @@ class AristonAPIRequestTests(unittest.TestCase):
             with self.assertRaisesRegex(ConnectionException, "Invalid token"):
                 request("GET", "https://example.test/invalid-token", is_retry=True)
 
+    def test_sync_connect_returns_false_and_wraps_transport_errors(self):
+        api = AristonAPI("user", "password")
+        with patch.object(api, "_post", return_value=None):
+            self.assertFalse(api.connect())
+        with patch.object(api, "_post", side_effect=RuntimeError("offline")):
+            with self.assertRaises(ConnectionException) as error:
+                api.connect()
+        self.assertIsInstance(error.exception.__cause__, RuntimeError)
+
+    def test_async_connect_returns_false_and_wraps_transport_errors(self):
+        api = AristonAPI("user", "password")
+
+        async def exercise():
+            with patch.object(api, "_async_post", new=AsyncMock(return_value=None)):
+                self.assertFalse(await api.async_connect())
+            with patch.object(api, "_async_post", new=AsyncMock(side_effect=RuntimeError("offline"))):
+                with self.assertRaises(ConnectionException) as error:
+                    await api.async_connect()
+            self.assertIsInstance(error.exception.__cause__, RuntimeError)
+
+        asyncio.run(exercise())
+
     def test_async_read_endpoints_return_payloads_and_empty_defaults(self):
         api = AristonAPI("user", "password", api_url="https://example.test/api/")
         features = {DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}]}
@@ -403,6 +439,32 @@ class AristonAPIRequestTests(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(ConnectionException, "Invalid token"):
                     await request("GET", "https://example.test/invalid-token", is_retry=True)
+
+            with patch.object(api, "async_connect", new=AsyncMock(return_value=True)), patch(
+                "ariston.ariston_api.aiohttp.ClientSession",
+                side_effect=[
+                    FakeAsyncSession(FakeAsyncResponse(status_code=405)),
+                    FakeAsyncSession(FakeAsyncResponse({"ok": True})),
+                ],
+            ):
+                self.assertEqual(
+                    await request("GET", "https://example.test/refreshed-token"),
+                    {"ok": True},
+                )
+
+            with patch(
+                "ariston.ariston_api.aiohttp.ClientSession",
+                return_value=FakeAsyncSession(FakeAsyncResponse(status_code=404)),
+            ):
+                self.assertIsNone(await request("GET", "https://example.test/not-found"))
+
+            with patch(
+                "ariston.ariston_api.aiohttp.ClientSession",
+                return_value=FakeAsyncSession(FakeAsyncRateLimitedResponse()),
+            ):
+                with self.assertRaises(ConnectionException) as error:
+                    await request("GET", "https://example.test/rate-limited")
+            self.assertEqual(error.exception.args, (429, b"rate limited"))
 
         asyncio.run(exercise())
 

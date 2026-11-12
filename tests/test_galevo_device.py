@@ -104,6 +104,12 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         self.assertEqual(device.zones, device.features[DeviceFeatures.ZONES])
         self.assertEqual(device.zone_numbers, [1])
         self.assertEqual(device.water_heater_current_temperature, 1)
+        device._set_item_by_id(DeviceProperties.DHW_TEMP, 48)
+        device._set_item_by_id(DeviceProperties.DHW_STORAGE_TEMPERATURE, 62)
+        self.assertEqual(device.water_heater_current_temperature, 48)
+        device.custom_features[DeviceProperties.DHW_STORAGE_TEMPERATURE] = True
+        self.assertEqual(device.water_heater_current_temperature, 62)
+        device.custom_features[DeviceProperties.DHW_STORAGE_TEMPERATURE] = False
         self.assertEqual(device.water_heater_minimum_temperature, 0)
         self.assertEqual(device.water_heater_maximum_temperature, 99)
         self.assertEqual(device.water_heater_target_temperature, 1)
@@ -152,6 +158,14 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         self.assertEqual(device.plant_mode_options, [mode.value for mode in PlantMode])
         self.assertEqual(device.plant_mode_opt_texts, [mode.name for mode in PlantMode])
         self.assertEqual(device.plant_mode_text, PlantMode.WINTER.name)
+        plant_mode_item = next(
+            item for item in device.data["items"] if item["id"] == DeviceProperties.PLANT_MODE
+        )
+        plant_mode_item[PropertyType.VALUE] = PlantMode.UNDEFINED.value
+        plant_mode_item[PropertyType.OPTIONS] = [
+            mode.value for mode in PlantMode if mode is not PlantMode.UNDEFINED
+        ]
+        self.assertEqual(device.plant_mode_text, PlantMode.UNDEFINED.name)
         self.assertEqual(device.signal_strength_value, 4)
         self.assertEqual(device.signal_strength_unit, "%")
         self.assertEqual(device.ch_return_temp_value, 38)
@@ -228,6 +242,17 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         self.assertTrue(device.holiday_mode_value)
         self.assertEqual(device.holiday_expires_on, "2026-12-25T00:00:00")
 
+        no_features = self.make_device()
+        no_features.features = {}
+        no_features.api.get_features_for_device.return_value = {
+            DeviceFeatures.DHW_MODE_CHANGEABLE: True,
+            DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}],
+        }
+        no_features.api.get_properties.return_value = self.make_data()
+        no_features.api.get_menu_items.return_value = no_features.menu_items
+        no_features.update_state()
+        no_features.api.get_features_for_device.assert_called_once_with("gw-1")
+
         device.api.async_get_features_for_device = AsyncMock(return_value={DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}]})
         device.api.async_get_properties = AsyncMock(return_value=self.make_data())
         device.api.async_get_menu_items = AsyncMock(return_value=device.menu_items)
@@ -253,6 +278,21 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         asyncio.run(async_updates())
         self.assertEqual(device.api.async_set_property.await_count, 11)
         self.assertEqual(device.holiday_expires_on, "2026-12-31T00:00:00")
+
+        async_no_features = self.make_device()
+        async_no_features.features = {}
+        async_no_features.api.async_get_features_for_device = AsyncMock(return_value={
+            DeviceFeatures.DHW_PROG_SUPPORTED: True,
+            DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}],
+        })
+        async_no_features.api.async_get_properties = AsyncMock(return_value=self.make_data())
+        async_no_features.api.async_get_menu_items = AsyncMock(return_value=async_no_features.menu_items)
+
+        async def refresh_without_features():
+            await async_no_features.async_update_state()
+
+        asyncio.run(refresh_without_features())
+        async_no_features.api.async_get_features_for_device.assert_awaited_once_with("gw-1")
 
     def test_consumption_settings_and_energy_account_paths(self):
         device = self.make_device()
@@ -309,6 +349,8 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         self.assertIsNone(device.electricity_consumption_for_water_last_month)
         device.energy_account = {}
         self.assertIsNone(device.gas_consumption_for_heating_last_month)
+        self.assertIsNone(device.electricity_consumption_for_heating_last_month)
+        self.assertIsNone(device.electricity_consumption_for_cooling_last_month)
 
         sequences = [
             {"k": ConsumptionType.CENTRAL_HEATING_TOTAL_ENERGY.value, "p": ConsumptionTimeInterval.LAST_MONTH.value, "v": [1, 2]},
@@ -330,6 +372,9 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         asyncio.run(device.async_update_energy())
         self.assertEqual(device.energy_account, {"LastMonth": [{"gas": 1}]})
         self.assertEqual(device.consumptions_settings, {"async": True})
+        device.api.async_get_energy_account.return_value = {"LastMonth": []}
+        asyncio.run(device.async_update_energy())
+        self.assertEqual(device.energy_account, {"LastMonth": [{"elect": 3, "cool": 7}]})
 
 
 if __name__ == "__main__":
