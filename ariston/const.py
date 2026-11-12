@@ -232,6 +232,7 @@ class NuosSplitOperativeMode(WaterHeaterMode):
     COMFORT = 1
     FAST = 2
     IMEMORY = 3
+    GREEN_PLUS = 6
 
 
 @unique
@@ -427,6 +428,7 @@ class NuosSplitProperties(VelisDeviceProperties):
     OP_MODE: Final[str] = "opMode"
     BOOST_ON: Final[str] = "boostOn"
     HP_STATE: Final[str] = "hpState"
+    HOLIDAY_UNTIL: Final[str] = "holidayUntil"
 
 
 class EvoLydosDeviceProperties(VelisDeviceProperties):
