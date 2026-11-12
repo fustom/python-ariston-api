@@ -12,7 +12,7 @@ dependencies = [
     "aiohttp",
     "requests"
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = { file = "LICENSE" }
 version = "0.19.9"
 dynamic = ['description']
