@@ -232,6 +232,7 @@ class NuosSplitOperativeMode(WaterHeaterMode):
     COMFORT = 1
     FAST = 2
     IMEMORY = 3
+    GREEN_PLUS = 6
 
 
 @unique
