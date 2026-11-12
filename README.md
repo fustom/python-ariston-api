@@ -18,6 +18,12 @@ Use pip3 to install the latest version of this module.
 pip3 install ariston
 ```
 
+## Tests
+Run the unit test suite with Python 3.11 or newer:
+```
+python -m unittest discover --start-directory tests --verbose
+```
+
 ## The easy way (recommended for testing the module)
 First, open Python 3 and import ariston module.
 ```
