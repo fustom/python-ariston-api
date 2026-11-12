@@ -192,7 +192,7 @@ class AristonDeviceModelTests(unittest.TestCase):
             await device.async_set_max_setpoint_temp(72)
 
         asyncio.run(update_and_set())
-        self.assertEqual(device.features, {"async": True})
+        self.assertEqual(device.features, {"async": True, "dhwModeChangeable": True})
         self.assertEqual(device.data, {"state": "async", VelisBaseDeviceProperties.ON: True})
         self.assertTrue(device.plant_settings[MedDeviceSettings.MED_ANTILEGIONELLA_ON_OFF])
         self.assertEqual(device.plant_settings[MedDeviceSettings.MED_MAX_SETPOINT_TEMPERATURE], 72)
