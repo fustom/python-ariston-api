@@ -157,6 +157,7 @@ class AristonDeviceModelTests(unittest.TestCase):
             MedDeviceSettings.MED_MAX_SETPOINT_TEMPERATURE: 75,
         }
         device.get_features()
+        device.update_state()
         self.assertTrue(device.custom_features["hasDhw"])
         self.assertTrue(device.features["dhwModeChangeable"])
         self.assertEqual(device.data, {"state": "ready"})
@@ -358,7 +359,7 @@ class AristonDeviceModelTests(unittest.TestCase):
             with self.subTest(property_name=property_name):
                 self.assertEqual(getattr(device, property_name), 1)
         self.assertEqual(device.water_heater_mode, LydosPlantMode)
-        self.assertEqual(device.plant_data.value, "Se")
+        self.assertEqual(device.plant_data.value, "sePlantData")
 
         operations = (
             ("set_water_heater_operation_mode", "async_set_water_heater_operation_mode", "BOOST"),

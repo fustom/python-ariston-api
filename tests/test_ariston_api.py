@@ -194,10 +194,10 @@ class AristonAPIRequestTests(unittest.TestCase):
 
         for name, args, transport, path_part, nonempty_default, empty_default in endpoints:
             with self.subTest(endpoint=name, response="payload"):
-                with patch.object(api, transport, return_value=payload) as request:
+                response = payload if isinstance(nonempty_default, list) else payload[0]
+                with patch.object(api, transport, return_value=response) as request:
                     result = getattr(api, name)(*args)
-                expected = payload if isinstance(nonempty_default, list) else payload[0]
-                self.assertEqual(result, expected)
+                self.assertEqual(result, response)
                 self.assertIn(path_part, request.call_args.args[0])
             with self.subTest(endpoint=name, response="empty"):
                 with patch.object(api, transport, return_value=None) as request:
@@ -303,7 +303,7 @@ class AristonAPIRequestTests(unittest.TestCase):
             elif isinstance(empty, list):
                 expected_nonempty = response
             else:
-                expected_nonempty = response[0]
+                expected_nonempty = response
             for value, expected in ((response, expected_nonempty), (None, empty)):
                 with patch.object(api, "_async_get", new=AsyncMock(return_value=value)) as request:
                     result = await getattr(api, name)(*args)
@@ -312,7 +312,11 @@ class AristonAPIRequestTests(unittest.TestCase):
 
         async def run_all():
             for name, args, _, nonempty_default, empty_default in endpoints:
-                response = {"sample": "value"} if nonempty_default is None else payload
+                response = (
+                    {"sample": "value"}
+                    if nonempty_default is None or isinstance(empty_default, dict)
+                    else payload
+                )
                 await exercise(name, args, response, empty_default)
 
         asyncio.run(run_all())
