@@ -22,4 +22,6 @@ jobs:
           PIP_CONFIG_FILE: "${{ github.workspace }}/pip.conf"
         run: python -m pip install --require-hashes -r requirements.txt
       - name: Run unit tests
-        run: python -m unittest discover --start-directory tests --verbose
+        run: python -m coverage run --source=ariston -m unittest discover --start-directory tests --verbose
+      - name: Report coverage
+        run: python -m coverage report --show-missing
