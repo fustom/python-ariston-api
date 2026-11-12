@@ -197,7 +197,7 @@ class AristonDeviceModelTests(unittest.TestCase):
         self.assertTrue(device.plant_settings[MedDeviceSettings.MED_ANTILEGIONELLA_ON_OFF])
         self.assertEqual(device.plant_settings[MedDeviceSettings.MED_MAX_SETPOINT_TEMPERATURE], 72)
         device.api.async_set_velis_power.assert_awaited_once()
-        self.assertEqual(device.water_heater_mode_operation_texts, [mode.name for mode in VelisPlantMode])
+        self.assertEqual(device.water_heater_mode_operation_texts, [mode.name for mode in EvoPlantMode])
 
     def test_lux_lux2_and_lydos_special_modes_and_power_option(self):
         lux = self.make_device(
