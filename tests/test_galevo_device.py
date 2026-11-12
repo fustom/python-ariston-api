@@ -112,7 +112,7 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         device.custom_features[DeviceProperties.DHW_STORAGE_TEMPERATURE] = False
         self.assertEqual(device.water_heater_minimum_temperature, 0)
         self.assertEqual(device.water_heater_maximum_temperature, 99)
-        self.assertEqual(device.water_heater_target_temperature, 1)
+        self.assertEqual(device.water_heater_target_temperature, 48)
         self.assertEqual(device.water_heater_temperature_decimals, 1)
         self.assertEqual(device.water_heater_temperature_unit, "°C")
         self.assertEqual(device.water_heater_temperature_step, 0.5)
