@@ -18,6 +18,7 @@ from .const import (
     DeviceProperties,
     GasEnergyUnit,
     GasType,
+    HOLIDAY_DATE_FORMAT,
     PlantMode,
     PropertyType,
     ThermostatProperties,
@@ -43,9 +44,9 @@ class AristonGalevoDevice(AristonDevice):
         super().__init__(api, attributes)
         self.umsys = "si" if is_metric else "us"
         self.language_tag = language_tag
-        self.consumptions_settings: dict[str, Any] = dict()
-        self.energy_account: dict[str, Any] = dict()
-        self.menu_items: list[dict[str, Any]] = list()
+        self.consumptions_settings: dict[str, Any] = {}
+        self.energy_account: dict[str, Any] = {}
+        self.menu_items: list[dict[str, Any]] = []
 
     @property
     def consumption_type(self) -> str:
@@ -979,7 +980,9 @@ class AristonGalevoDevice(AristonDevice):
     @staticmethod
     def _create_holiday_end_date(holiday_end: Optional[date]):
         return (
-            None if holiday_end is None else holiday_end.strftime("%Y-%m-%dT00:00:00")
+            None
+            if holiday_end is None
+            else holiday_end.strftime(HOLIDAY_DATE_FORMAT)
         )
 
     def _set_holiday(self, holiday_end_date: Optional[str]):

@@ -180,13 +180,17 @@ class AristonNuosSplitDevice(AristonVelisDevice):
         ].value
 
     async def async_set_water_heater_operation_mode(self, operation_mode: str):
-        """Async set water heater operation mode"""
-        await self.api.async_set_nuos_mode(
-            self.gw, NuosSplitOperativeMode[operation_mode]
-        )
-        self.data[NuosSplitProperties.MODE] = NuosSplitOperativeMode[
-            operation_mode
-        ].value
+        """Async set water heater operation mode.
+
+        GREEN (0) goes through the R2 web-app endpoint: the api/v2
+        operativeMode route silently drops value 0 (proven 2026-10-18).
+        """
+        mode = NuosSplitOperativeMode[operation_mode]
+        if mode is NuosSplitOperativeMode.GREEN:
+            await self.api.async_set_nuos_mode_via_r2(self.gw, mode)
+        else:
+            await self.api.async_set_nuos_mode(self.gw, mode)
+        self.data[NuosSplitProperties.OP_MODE] = mode.value
 
     def set_min_setpoint_temp(self, min_setpoint_temp: float):
         """Set water heater minimum setpoint temperature"""

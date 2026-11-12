@@ -5,8 +5,24 @@ from typing import Final, Any
 
 ARISTON_API_URL: Final[str] = "https://www.ariston-net.remotethermo.com/api/v2/"
 ARISTON_LOGIN: Final[str] = "accounts/login"
+# Web-app (R2) routes. The api/v2 operativeMode endpoint silently drops
+# value 0 (GREEN) for Nuos Split — proven 2026-10-18 — while the web app's
+# PlantHomeSlp/SetData applies it. GREEN writes go through these routes.
+ARISTON_R2_BASE_URL: Final[str] = "https://www.ariston-net.remotethermo.com"
+ARISTON_R2_LOGIN_PAGE: Final[str] = ARISTON_R2_BASE_URL + "/R2/Account/Login"
+ARISTON_R2_HOME: Final[str] = ARISTON_R2_BASE_URL + "/R2/Home"
+ARISTON_R2_SLP_GET_DATA: Final[str] = (
+    ARISTON_R2_BASE_URL
+    + "/R2/PlantHomeSlp/GetData/{0}?fetchSettings=true&fetchTimeProg=true"
+)
+ARISTON_R2_SLP_SET_DATA: Final[str] = ARISTON_R2_BASE_URL + "/R2/PlantHomeSlp/SetData/{0}"
+ARISTON_R2_USER_AGENT: Final[str] = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/128.0 Safari/537.36"
+)
 ARISTON_REMOTE: Final[str] = "remote"
 ARISTON_VELIS: Final[str] = "velis"
+HOLIDAY_DATE_FORMAT: Final[str] = "%Y-%m-%dT00:00:00"
 ARISTON_PLANTS: Final[str] = "plants"
 ARISTON_LITE: Final[str] = "lite"
 ARISTON_DATA_ITEMS: Final[str] = "dataItems"
@@ -226,12 +242,17 @@ class NuosSplitPlantMode(Enum):
 
 @unique
 class NuosSplitOperativeMode(WaterHeaterMode):
-    """NuosSplit operative mode enum"""
+    """NuosSplit operative mode enum.
+
+    Official range (web app, 2026-10-18): Green=0, Comfort=1, Fast=2,
+    Auto=3, HcHp=4, Electric=5, GreenPlus=6. Only the modes the device
+    reliably accepts are exposed; IMEMORY was a mislabel of Auto=3.
+    """
 
     GREEN = 0
     COMFORT = 1
     FAST = 2
-    IMEMORY = 3
+    AUTO = 3
 
 
 @unique

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any, Optional
 
@@ -24,6 +25,11 @@ from .const import (
     ARISTON_TIME_PROGS,
     ARISTON_VELIS,
     ARISTON_MENU_ITEMS,
+    ARISTON_R2_HOME,
+    ARISTON_R2_LOGIN_PAGE,
+    ARISTON_R2_SLP_GET_DATA,
+    ARISTON_R2_SLP_SET_DATA,
+    ARISTON_R2_USER_AGENT,
     BsbOperativeMode,
     BsbZoneMode,
     DeviceFeatures,
@@ -39,6 +45,29 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+_RATE_LIMIT_RE = re.compile(rb"blocked for (\d+) seconds", re.IGNORECASE)
+
+
+def _parse_block_seconds(content: bytes) -> Optional[int]:
+    """Extract the block duration in seconds from a 429 response body."""
+    match = _RATE_LIMIT_RE.search(content)
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
+def _rate_limit_wait_seconds(content: bytes) -> int:
+    """Effective wait for a 429: parsed duration + 1s margin, else 5s."""
+    parsed = _parse_block_seconds(content)
+    if parsed is None:
+        _LOGGER.warning(
+            "Rate limited (429) without parsable block duration; "
+            "falling back to 5s wait"
+        )
+        return 5
+    _LOGGER.warning("Rate limited (429) for %s seconds; waiting it out", parsed + 1)
+    return parsed + 1
+
 
 class ConnectionException(Exception):
     """When can not connect to Ariston cloud"""
@@ -46,6 +75,10 @@ class ConnectionException(Exception):
 
 class AristonAPI:
     """Ariston API class"""
+
+    # Shared across all instances: one 429 silences every caller (all three
+    # HA coordinators) until the block window has passed.
+    _blocked_until: float = 0.0
 
     def __init__(
         self,
@@ -60,6 +93,16 @@ class AristonAPI:
         self.__api_url = api_url
         self.__token = ""
         self.__user_agent = user_agent
+        # Web-app (R2) cookie session; created lazily (aiohttp.CookieJar
+        # needs a running event loop) and logged in on first use.
+        self.__r2_cookies: Optional[aiohttp.CookieJar] = None
+        self.__r2_logged_in = False
+
+    def _r2_cookies(self) -> aiohttp.CookieJar:
+        """Lazily create the R2 cookie jar (requires a running loop)."""
+        if self.__r2_cookies is None:
+            self.__r2_cookies = aiohttp.CookieJar()
+        return self.__r2_cookies
 
     def connect(self) -> bool:
         """Login to ariston cloud and get token"""
@@ -85,14 +128,14 @@ class AristonAPI:
         devices = self._get(f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_PLANTS}")
         if devices is not None:
             return list(devices)
-        return list()
+        return []
 
     def get_detailed_velis_devices(self) -> list[Any]:
         """Get detailed cloud devices"""
         devices = self._get(f"{self.__api_url}{ARISTON_VELIS}/{ARISTON_PLANTS}")
         if devices is not None:
             return list(devices)
-        return list()
+        return []
 
     def get_devices(self) -> list[Any]:
         """Get cloud devices"""
@@ -101,7 +144,7 @@ class AristonAPI:
         )
         if devices is not None:
             return list(devices)
-        return list()
+        return []
 
     def get_features_for_device(self, gw_id: str) -> dict[str, Any]:
         """Get features for the device"""
@@ -110,7 +153,7 @@ class AristonAPI:
         )
         if features is not None:
             return features
-        return dict()
+        return {}
 
     def get_energy_account(self, gw_id: str) -> dict[str, Any]:
         """Get energy account for the device"""
@@ -119,7 +162,7 @@ class AristonAPI:
         )
         if energy_account is not None:
             return energy_account
-        return dict()
+        return {}
 
     def get_consumptions_sequences(self, gw_id: str, usages: str) -> list[Any]:
         """Get consumption sequences for the device"""
@@ -128,7 +171,7 @@ class AristonAPI:
         )
         if consumptions_sequences is not None:
             return list(consumptions_sequences)
-        return list()
+        return []
 
     def get_consumptions_settings(self, gw_id: str) -> dict[str, Any]:
         """Get consumption settings"""
@@ -138,7 +181,7 @@ class AristonAPI:
         )
         if consumptions_settings is not None:
             return consumptions_settings
-        return dict()
+        return {}
 
     def set_consumptions_settings(
         self,
@@ -174,7 +217,7 @@ class AristonAPI:
         )
         if properties is not None:
             return properties
-        return dict()
+        return {}
 
     def get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
         """Get BSB plant data."""
@@ -183,14 +226,14 @@ class AristonAPI:
         )
         if data is not None:
             return data
-        return dict()
+        return {}
 
     def get_velis_plant_data(self, plant_data: PlantData, gw_id: str) -> dict[str, Any]:
         """Get Velis properties"""
         data = self._get(f"{self.__api_url}{ARISTON_VELIS}/{plant_data.value}/{gw_id}")
         if data is not None:
             return data
-        return dict()
+        return {}
 
     def get_velis_plant_settings(
         self, plant_data: PlantData, gw_id: str
@@ -201,7 +244,7 @@ class AristonAPI:
         )
         if settings is not None:
             return settings
-        return dict()
+        return {}
 
     def get_menu_items(self, gw_id: str) -> list[dict[str, Any]]:
         """Get menu items"""
@@ -210,7 +253,7 @@ class AristonAPI:
         )
         if items is not None:
             return items
-        return list()
+        return []
 
     def set_property(
         self,
@@ -437,7 +480,7 @@ class AristonAPI:
         )
         if thermostat_time_progs is not None:
             return thermostat_time_progs
-        return dict()
+        return {}
 
     def set_holiday(
         self,
@@ -470,6 +513,11 @@ class AristonAPI:
         is_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Request with requests"""
+        if not is_retry and time.time() < AristonAPI._blocked_until:
+            raise ConnectionException(
+                429,
+                "Rate limited; skipping request until the block window ends",
+            )
         headers: dict[str, Any] = {
             "User-Agent": self.__user_agent,
             "ar.authToken": self.__token,
@@ -495,8 +543,9 @@ class AristonAPI:
                 case 404:
                     return None
                 case 429:
-                    content = response.content.decode()
-                    raise ConnectionException(response.status_code, content)
+                    return self.__handle_rate_limit(
+                        response, is_retry, method, path, params, body
+                    )
                 case _:
                     if not is_retry:
                         time.sleep(5)
@@ -513,6 +562,24 @@ class AristonAPI:
     def _post(self, path: str, body: Any) -> Any:
         """POST request"""
         return self.__request("POST", path, None, body)
+
+    def __handle_rate_limit(
+        self,
+        response,
+        is_retry: bool,
+        method: str,
+        path: str,
+        params: Optional[dict[str, Any]],
+        body: Any,
+    ) -> Optional[dict[str, Any]]:
+        """Sleep out the 429 block window, retry once, share the deadline."""
+        content = response.content
+        wait_seconds = _rate_limit_wait_seconds(content)
+        AristonAPI._blocked_until = time.time() + wait_seconds
+        if not is_retry:
+            time.sleep(wait_seconds)
+            return self.__request(method, path, params, body, True)
+        raise ConnectionException(response.status_code, content.decode())
 
     def _get(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
         """GET request"""
@@ -544,7 +611,7 @@ class AristonAPI:
         )
         if detailed_devices is not None:
             return list(detailed_devices)
-        return list()
+        return []
 
     async def async_get_detailed_velis_devices(self) -> list[Any]:
         """Async get detailed cloud devices"""
@@ -553,7 +620,7 @@ class AristonAPI:
         )
         if detailed_velis_devices is not None:
             return list(detailed_velis_devices)
-        return list()
+        return []
 
     async def async_get_devices(self) -> list[Any]:
         """Async get cloud devices"""
@@ -562,7 +629,7 @@ class AristonAPI:
         )
         if devices is not None:
             return list(devices)
-        return list()
+        return []
 
     async def async_get_features_for_device(
         self, gw_id: str
@@ -579,7 +646,7 @@ class AristonAPI:
         )
         if energy_account is not None:
             return energy_account
-        return dict()
+        return {}
 
     async def async_get_consumptions_sequences(
         self, gw_id: str, usages: str
@@ -590,7 +657,7 @@ class AristonAPI:
         )
         if consumptions_sequences is not None:
             return list(consumptions_sequences)
-        return list()
+        return []
 
     async def async_get_consumptions_settings(self, gw_id: str) -> dict[str, Any]:
         """Async get consumption settings"""
@@ -600,7 +667,7 @@ class AristonAPI:
         )
         if consumptions_settings is not None:
             return consumptions_settings
-        return dict()
+        return {}
 
     async def async_set_consumptions_settings(
         self,
@@ -628,7 +695,7 @@ class AristonAPI:
         )
         if properties is not None:
             return properties
-        return dict()
+        return {}
 
     async def async_get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
         """Get BSB plant data."""
@@ -637,7 +704,7 @@ class AristonAPI:
         )
         if data is not None:
             return data
-        return dict()
+        return {}
 
     async def async_get_velis_plant_data(
         self, plant_data: PlantData, gw_id: str
@@ -648,7 +715,7 @@ class AristonAPI:
         )
         if med_plant_data is not None:
             return med_plant_data
-        return dict()
+        return {}
 
     async def async_get_velis_plant_settings(
         self, plant_data: PlantData, gw_id: str
@@ -659,7 +726,7 @@ class AristonAPI:
         )
         if med_plant_settings is not None:
             return med_plant_settings
-        return dict()
+        return {}
 
     async def async_get_menu_items(self, gw_id: str) -> list[dict[str, Any]]:
         """Async get menu items"""
@@ -668,7 +735,7 @@ class AristonAPI:
         )
         if items is not None:
             return items
-        return list()
+        return []
 
     async def async_set_property(
         self,
@@ -735,6 +802,132 @@ class AristonAPI:
                 "new": value.value,
             },
         )
+
+    @staticmethod
+    def _build_nuos_r2_payload(plant_data: dict[str, Any], op_mode: int) -> dict[str, Any]:
+        """Build the R2 PlantHomeSlp/SetData envelope for an operative mode.
+
+        Mirrors the official web app: the cached plantData is echoed back
+        and only the viewModel fields change.
+        """
+        return {
+            "plantData": {
+                "__type__": ["my.entities.entityiface", "my.entities.slpplantdata"],
+                "gatewayId": plant_data.get("gw"),
+                "on": plant_data.get("on"),
+                "mode": plant_data.get("mode"),
+                "waterTemp": plant_data.get("waterTemp"),
+                "comfortTemp": plant_data.get("comfortTemp"),
+                "reducedTemp": plant_data.get("reducedTemp"),
+                "procReqTemp": plant_data.get("procReqTemp"),
+                "opMode": plant_data.get("opMode"),
+                "holidayUntil": plant_data.get("holidayUntil"),
+                "boostOn": plant_data.get("boostOn"),
+                "hpState": plant_data.get("hpState"),
+            },
+            "viewModel": {
+                "on": plant_data.get("on"),
+                "plantMode": plant_data.get("mode"),
+                "opMode": op_mode,
+                "boostOn": plant_data.get("boostOn"),
+                "comfortTemp": plant_data.get("comfortTemp"),
+                "holidayUntil": plant_data.get("holidayUntil"),
+            },
+        }
+
+    async def _async_r2_login(self) -> None:
+        """Log in to the R2 web app (form + anti-forgery token, cookie session)."""
+        self.__r2_logged_in = False
+        async with aiohttp.ClientSession(
+            cookie_jar=self._r2_cookies(),
+            headers={"User-Agent": ARISTON_R2_USER_AGENT},
+        ) as session:
+            async with session.get(ARISTON_R2_LOGIN_PAGE) as response:
+                html = await response.text()
+                if response.status != 200:
+                    raise ConnectionException(
+                        f"R2 login page returned HTTP {response.status}"
+                    )
+                match = re.search(
+                    r'name="__RequestVerificationToken"[^>]*value="([^"]+)"', html
+                )
+                if match is None:
+                    raise ConnectionException(
+                        "R2 login page has no __RequestVerificationToken"
+                    )
+                verification_token = match.group(1)
+
+            async with session.post(
+                ARISTON_R2_LOGIN_PAGE,
+                data={
+                    "__RequestVerificationToken": verification_token,
+                    "email": self.__username,
+                    "password": self.__password,
+                    "rememberMe": "false",
+                },
+                allow_redirects=False,
+            ) as response:
+                if response.status not in (200, 302):
+                    raise ConnectionException(
+                        f"R2 login returned HTTP {response.status}"
+                    )
+        self.__r2_logged_in = True
+
+    async def _async_r2_get_slp_plant_data(self, gw_id: str) -> dict[str, Any]:
+        """Read the Nuos Split plant data through the R2 web app."""
+        async with aiohttp.ClientSession(
+            cookie_jar=self._r2_cookies(),
+            headers={"User-Agent": ARISTON_R2_USER_AGENT},
+        ) as session:
+            async with session.get(
+                ARISTON_R2_SLP_GET_DATA.format(gw_id)
+            ) as response:
+                if response.status != 200:
+                    raise ConnectionException(
+                        f"R2 GetData returned HTTP {response.status}"
+                    )
+                try:
+                    body = await response.json()
+                    return body["data"]["plantData"]
+                except (aiohttp.ContentTypeError, KeyError, ValueError) as err:
+                    # An expired R2 forms-auth session redirects to the login
+                    # page: HTTP 200 text/html. Surface as ConnectionException
+                    # so the caller's fresh-login retry fires.
+                    raise ConnectionException(
+                        "R2 GetData returned no plant data (session expired?)"
+                    ) from err
+
+    async def async_set_nuos_mode_via_r2(
+        self, gw_id: str, value: NuosSplitOperativeMode
+    ) -> None:
+        """Set a Nuos Split operative mode through the R2 web app.
+
+        api/v2 operativeMode accepts values 1+ but silently drops 0 (GREEN);
+        this endpoint applies every value — it is what the official app uses.
+        """
+        if not self.__r2_logged_in:
+            await self._async_r2_login()
+        try:
+            plant_data = await self._async_r2_get_slp_plant_data(gw_id)
+        except ConnectionException:
+            # Session may have expired; one fresh login, then retry the read.
+            await self._async_r2_login()
+            plant_data = await self._async_r2_get_slp_plant_data(gw_id)
+        payload = self._build_nuos_r2_payload(plant_data, value.value)
+        async with aiohttp.ClientSession(
+            cookie_jar=self._r2_cookies(),
+            headers={
+                "User-Agent": ARISTON_R2_USER_AGENT,
+                "X-Requested-With": "XMLHttpRequest",
+            },
+        ) as session:
+            async with session.post(
+                ARISTON_R2_SLP_SET_DATA.format(gw_id), json=payload
+            ) as response:
+                if response.status != 200:
+                    raise ConnectionException(
+                        f"R2 SetData returned HTTP {response.status}"
+                    )
 
     async def async_set_bsb_mode(self, gw_id: str, value: BsbOperativeMode) -> None:
         """Async set Bsb mode"""
@@ -892,6 +1085,32 @@ class AristonAPI:
             {setting: {"new": value, "old": old_value}},
         )
 
+    def set_velis_holiday(
+        self,
+        gw_id: str,
+        holiday_end_date: Optional[str],
+    ) -> None:
+        """Set Velis holiday"""
+        self._post(
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/holiday",
+            {
+                "new": holiday_end_date,
+            },
+        )
+
+    async def async_set_velis_holiday(
+        self,
+        gw_id: str,
+        holiday_end_date: Optional[str],
+    ) -> None:
+        """Async set Velis holiday"""
+        await self._async_post(
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/holiday",
+            {
+                "new": holiday_end_date,
+            },
+        )
+
     async def async_get_thermostat_time_progs(
         self, gw_id: str, zone: int, umsys: str
     ) -> Optional[dict[str, Any]]:
@@ -932,6 +1151,11 @@ class AristonAPI:
         is_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Async request with aiohttp"""
+        if not is_retry and time.time() < AristonAPI._blocked_until:
+            raise ConnectionException(
+                429,
+                "Rate limited; skipping request until the block window ends",
+            )
         headers: dict[str, Any] = {
             "User-Agent": self.__user_agent,
             "ar.authToken": self.__token,
@@ -964,8 +1188,9 @@ class AristonAPI:
                     case 404:
                         return None
                     case 429:
-                        content = await response.content.read()
-                        raise ConnectionException(response.status, content)
+                        return await self.__async_handle_rate_limit(
+                            response, is_retry, method, path, params, body
+                        )
                     case _:
                         if not is_retry:
                             await asyncio.sleep(5)
@@ -984,6 +1209,24 @@ class AristonAPI:
     async def _async_post(self, path: str, body: Any) -> Any:
         """Async POST request"""
         return await self.__async_request("POST", path, None, body)
+
+    async def __async_handle_rate_limit(
+        self,
+        response,
+        is_retry: bool,
+        method: str,
+        path: str,
+        params: Optional[dict[str, Any]],
+        body: Any,
+    ) -> Optional[dict[str, Any]]:
+        """Sleep out the 429 block window, retry once, share the deadline."""
+        content = await response.content.read()
+        wait_seconds = _rate_limit_wait_seconds(content)
+        AristonAPI._blocked_until = time.time() + wait_seconds
+        if not is_retry:
+            await asyncio.sleep(wait_seconds)
+            return await self.__async_request(method, path, params, body, True)
+        raise ConnectionException(response.status, content)
 
     async def _async_get(
         self, path: str, params: Optional[dict[str, Any]] = None
