@@ -299,15 +299,21 @@ class AristonDeviceModelTests(unittest.TestCase):
 
         device.set_water_heater_boost(False)
         device.set_water_heater_temperature(60)
+        # The getter must reflect the requested target immediately, without
+        # waiting for the next cloud refresh (regression: setter used to write
+        # procReqTemp while the getter reads comfortTemp).
+        self.assertEqual(device.water_heater_target_temperature, 60)
+        self.assertEqual(device.data[NuosSplitProperties.COMFORT_TEMP], 60)
+        self.assertNotIn(NuosSplitProperties.PROC_REQ_TEMP, device.data)
         device.set_water_heater_reduced_temperature(42)
         device.set_water_heater_operation_mode("FAST")
         device.set_min_setpoint_temp(35)
         device.set_preheating(True)
         device.set_heating_rate(5)
-        self.assertEqual(device.data[NuosSplitProperties.PROC_REQ_TEMP], 43)
+        self.assertEqual(device.data[NuosSplitProperties.COMFORT_TEMP], 43)
         self.assertEqual(device.data[NuosSplitProperties.REDUCED_TEMP], 42)
         self.assertEqual(device.data[NuosSplitProperties.MODE], NuosSplitOperativeMode.FAST.value)
-        device.api.set_nuos_temperature.assert_called_with("gw-1", 43, 42, 55, 40)
+        device.api.set_nuos_temperature.assert_called_with("gw-1", 43, 42, 60, 40)
         device.api.set_velis_plant_setting.assert_called()
 
         device.api.async_set_nous_boost = AsyncMock()
@@ -318,6 +324,9 @@ class AristonDeviceModelTests(unittest.TestCase):
         async def set_values():
             await device.async_set_water_heater_boost(True)
             await device.async_set_water_heater_temperature(62)
+            self.assertEqual(device.water_heater_target_temperature, 62)
+            self.assertEqual(device.data[NuosSplitProperties.COMFORT_TEMP], 62)
+            self.assertNotIn(NuosSplitProperties.PROC_REQ_TEMP, device.data)
             await device.async_set_water_heater_reduced_temperature(39)
             await device.async_set_water_heater_operation_mode("GREEN")
             await device.async_set_min_setpoint_temp(36)
