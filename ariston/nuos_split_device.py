@@ -146,7 +146,12 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     def _set_water_heater_temperature(self, temperature: float, reduced: float):
         """Set water heater temperature"""
         self.api.set_nuos_temperature(self.gw, temperature, reduced, self.water_heater_target_temperature, self.water_heater_reduced_temperature)
-        self.data[NuosSplitProperties.PROC_REQ_TEMP] = temperature
+        # Mirror what the cloud now stores. The /temperatures endpoint sets
+        # `comfortTemp` and `reducedTemp`; `procReqTemp` is a separate,
+        # device-driven field. Writing to it here did not match what the
+        # `water_heater_target_temperature` getter reads back, so the
+        # optimistic cache update was invisible until the next refresh.
+        self.data[NuosSplitProperties.COMFORT_TEMP] = temperature
         self.data[NuosSplitProperties.REDUCED_TEMP] = reduced
 
     def set_water_heater_temperature(self, temperature: float):
@@ -163,7 +168,10 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     ):
         """Async set water heater temperature"""
         await self.api.async_set_nuos_temperature(self.gw, temperature, reduced, self.water_heater_target_temperature, self.water_heater_reduced_temperature)
-        self.data[NuosSplitProperties.PROC_REQ_TEMP] = temperature
+        # See note in `_set_water_heater_temperature`: the cloud /temperatures
+        # endpoint updates `comfortTemp` and `reducedTemp`, so the optimistic
+        # cache must mirror those fields, not `procReqTemp`.
+        self.data[NuosSplitProperties.COMFORT_TEMP] = temperature
         self.data[NuosSplitProperties.REDUCED_TEMP] = reduced
 
     async def async_set_water_heater_temperature(self, temperature: float):

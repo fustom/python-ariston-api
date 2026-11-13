@@ -4,6 +4,8 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch
 
+import aiohttp
+
 from ariston.ariston_api import AristonAPI, ConnectionException
 from ariston.const import (
     BsbOperativeMode,
@@ -91,6 +93,10 @@ class AristonAPIRequestTests(unittest.TestCase):
 
         self.assertEqual(devices, [{"gw": "gateway-1"}])
         login_call, devices_call = request.call_args_list
+        # requests expects seconds: a regression to milliseconds (30000) would
+        # let a hung connection block the caller for hours.
+        self.assertEqual(login_call.kwargs["timeout"], 30)
+        self.assertEqual(devices_call.kwargs["timeout"], 30)
         self.assertEqual(login_call.args[0], "POST")
         self.assertEqual(
             login_call.kwargs["json"],
@@ -123,8 +129,14 @@ class AristonAPIRequestTests(unittest.TestCase):
         with patch(
             "ariston.ariston_api.aiohttp.ClientSession",
             side_effect=[login_session, devices_session],
-        ):
+        ) as client_session:
             devices = asyncio.run(connect_and_discover())
+
+        # Every async request must set an explicit total timeout instead of
+        # relying on aiohttp's 5 minute default.
+        self.assertEqual(client_session.call_count, 2)
+        for call in client_session.call_args_list:
+            self.assertEqual(call.kwargs["timeout"], aiohttp.ClientTimeout(total=30))
 
         self.assertEqual(devices, [{"gw": "gateway-1"}])
         self.assertEqual(
