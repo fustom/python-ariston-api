@@ -204,7 +204,14 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     def set_water_heater_operation_mode(self, operation_mode: str):
         """Set water heater operation mode"""
         self.api.set_nuos_mode(self.gw, NuosSplitOperativeMode[operation_mode])
-        self.data[NuosSplitProperties.MODE] = NuosSplitOperativeMode[
+        # The Nuos cloud payload exposes two distinct fields: `mode` (the
+        # plant mode shared with other Velis devices) and `opMode` (the
+        # operative mode specific to Nuos: GREEN / COMFORT / FAST / IMEMORY).
+        # `set_nuos_mode` posts to `/operativeMode`, so the server updates
+        # `opMode`. The `water_heater_mode_value` getter also reads `opMode`,
+        # so the optimistic cache update has to mirror that field, not the
+        # generic `mode`.
+        self.data[NuosSplitProperties.OP_MODE] = NuosSplitOperativeMode[
             operation_mode
         ].value
 
@@ -213,7 +220,10 @@ class AristonNuosSplitDevice(AristonVelisDevice):
         await self.api.async_set_nuos_mode(
             self.gw, NuosSplitOperativeMode[operation_mode]
         )
-        self.data[NuosSplitProperties.MODE] = NuosSplitOperativeMode[
+        # See note in `set_water_heater_operation_mode`: the cloud
+        # /operativeMode endpoint updates `opMode`, which is also what the
+        # `water_heater_mode_value` getter reads.
+        self.data[NuosSplitProperties.OP_MODE] = NuosSplitOperativeMode[
             operation_mode
         ].value
 

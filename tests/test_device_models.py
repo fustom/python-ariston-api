@@ -307,12 +307,16 @@ class AristonDeviceModelTests(unittest.TestCase):
         self.assertNotIn(NuosSplitProperties.PROC_REQ_TEMP, device.data)
         device.set_water_heater_reduced_temperature(42)
         device.set_water_heater_operation_mode("FAST")
+        # The getter must reflect the requested mode immediately (regression:
+        # setter used to write `mode` while the getter reads `opMode`).
+        self.assertEqual(device.water_heater_mode_value, NuosSplitOperativeMode.FAST.value)
+        self.assertNotIn(NuosSplitProperties.MODE, device.data)
         device.set_min_setpoint_temp(35)
         device.set_preheating(True)
         device.set_heating_rate(5)
         self.assertEqual(device.data[NuosSplitProperties.COMFORT_TEMP], 43)
         self.assertEqual(device.data[NuosSplitProperties.REDUCED_TEMP], 42)
-        self.assertEqual(device.data[NuosSplitProperties.MODE], NuosSplitOperativeMode.FAST.value)
+        self.assertEqual(device.data[NuosSplitProperties.OP_MODE], NuosSplitOperativeMode.FAST.value)
         device.api.set_nuos_temperature.assert_called_with("gw-1", 43, 42, 60, 40)
         device.api.set_velis_plant_setting.assert_called()
 
@@ -335,7 +339,9 @@ class AristonDeviceModelTests(unittest.TestCase):
 
         asyncio.run(set_values())
         self.assertTrue(device.data[NuosSplitProperties.BOOST_ON])
-        self.assertEqual(device.data[NuosSplitProperties.MODE], NuosSplitOperativeMode.GREEN.value)
+        self.assertEqual(device.data[NuosSplitProperties.OP_MODE], NuosSplitOperativeMode.GREEN.value)
+        self.assertEqual(device.water_heater_mode_value, NuosSplitOperativeMode.GREEN.value)
+        self.assertNotIn(NuosSplitProperties.MODE, device.data)
         self.assertEqual(device.plant_settings[SlpDeviceSettings.SLP_HEATING_RATE], 4)
         self.assertEqual(device.api.async_set_velis_plant_setting.await_count, 3)
 
@@ -429,7 +435,10 @@ class AristonDeviceModelTests(unittest.TestCase):
 
         device.set_water_heater_operation_mode("GREEN_PLUS")
         self.assertEqual(
-            device.data[NuosSplitProperties.MODE], NuosSplitOperativeMode.GREEN_PLUS.value
+            device.data[NuosSplitProperties.OP_MODE], NuosSplitOperativeMode.GREEN_PLUS.value
+        )
+        self.assertEqual(
+            device.water_heater_mode_value, NuosSplitOperativeMode.GREEN_PLUS.value
         )
         device.api.set_nuos_mode.assert_called_once_with(
             "gw-1", NuosSplitOperativeMode.GREEN_PLUS
@@ -438,7 +447,10 @@ class AristonDeviceModelTests(unittest.TestCase):
         device.api.async_set_nuos_mode = AsyncMock()
         asyncio.run(device.async_set_water_heater_operation_mode("GREEN_PLUS"))
         self.assertEqual(
-            device.data[NuosSplitProperties.MODE], NuosSplitOperativeMode.GREEN_PLUS.value
+            device.data[NuosSplitProperties.OP_MODE], NuosSplitOperativeMode.GREEN_PLUS.value
+        )
+        self.assertEqual(
+            device.water_heater_mode_value, NuosSplitOperativeMode.GREEN_PLUS.value
         )
         device.api.async_set_nuos_mode.assert_awaited_once_with(
             "gw-1", NuosSplitOperativeMode.GREEN_PLUS
