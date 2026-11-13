@@ -499,7 +499,7 @@ class AristonAPI:
             params,
         )
         response = requests.request(
-            method, path, params=params, json=body, headers=headers, timeout=30000
+            method, path, params=params, json=body, headers=headers, timeout=30
         )
         if not response.ok:
             match response.status_code:
