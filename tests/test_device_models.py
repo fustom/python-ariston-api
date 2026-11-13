@@ -2,7 +2,8 @@
 
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, Mock
+from datetime import date
+from unittest.mock import AsyncMock, Mock, call
 
 from ariston.const import (
     ConsumptionTimeInterval,
@@ -358,6 +359,80 @@ class AristonDeviceModelTests(unittest.TestCase):
         self.assertEqual(
             async_missing_temperature.api.async_set_nuos_temperature.await_args.args[1:3],
             (61, 0),
+        )
+
+    def test_nuos_split_holiday_state_and_sync_async_setters(self):
+        holiday_end_date = "2026-12-31T00:00:00"
+        scheduled = self.make_device(
+            AristonNuosSplitDevice,
+            {NuosSplitProperties.HOLIDAY_UNTIL: holiday_end_date},
+        )
+        self.assertEqual(scheduled.holiday_end_date, holiday_end_date)
+        self.assertTrue(scheduled.holiday_active)
+
+        cleared = self.make_device(
+            AristonNuosSplitDevice,
+            {NuosSplitProperties.HOLIDAY_UNTIL: None},
+        )
+        self.assertIsNone(cleared.holiday_end_date)
+        self.assertFalse(cleared.holiday_active)
+
+        missing = self.make_device(AristonNuosSplitDevice)
+        self.assertIsNone(missing.holiday_end_date)
+        self.assertFalse(missing.holiday_active)
+
+        device = self.make_device(AristonNuosSplitDevice)
+        device.set_holiday(date(2026, 12, 31))
+        self.assertEqual(device.holiday_end_date, holiday_end_date)
+        self.assertTrue(device.holiday_active)
+        device.set_holiday(None)
+        self.assertIsNone(device.holiday_end_date)
+        self.assertFalse(device.holiday_active)
+        device.api.set_velis_slp_holiday.assert_has_calls(
+            [call("gw-1", holiday_end_date), call("gw-1", None)]
+        )
+
+        async_device = self.make_device(AristonNuosSplitDevice)
+        async_device.api.async_set_velis_slp_holiday = AsyncMock()
+
+        async def set_holidays():
+            await async_device.async_set_holiday(date(2026, 12, 31))
+            self.assertEqual(async_device.holiday_end_date, holiday_end_date)
+            self.assertTrue(async_device.holiday_active)
+            await async_device.async_set_holiday(None)
+
+        asyncio.run(set_holidays())
+        self.assertIsNone(async_device.holiday_end_date)
+        self.assertFalse(async_device.holiday_active)
+        self.assertEqual(
+            async_device.api.async_set_velis_slp_holiday.await_args_list,
+            [call("gw-1", holiday_end_date), call("gw-1", None)],
+        )
+
+    def test_nuos_split_green_plus_mode_is_exposed_and_settable(self):
+        device = self.make_device(AristonNuosSplitDevice)
+        self.assertEqual(NuosSplitOperativeMode.GREEN_PLUS.value, 6)
+        self.assertIn(
+            NuosSplitOperativeMode.GREEN_PLUS.value,
+            device.water_heater_mode_options,
+        )
+        self.assertIn("GREEN_PLUS", device.water_heater_mode_operation_texts)
+
+        device.set_water_heater_operation_mode("GREEN_PLUS")
+        self.assertEqual(
+            device.data[NuosSplitProperties.MODE], NuosSplitOperativeMode.GREEN_PLUS.value
+        )
+        device.api.set_nuos_mode.assert_called_once_with(
+            "gw-1", NuosSplitOperativeMode.GREEN_PLUS
+        )
+
+        device.api.async_set_nuos_mode = AsyncMock()
+        asyncio.run(device.async_set_water_heater_operation_mode("GREEN_PLUS"))
+        self.assertEqual(
+            device.data[NuosSplitProperties.MODE], NuosSplitOperativeMode.GREEN_PLUS.value
+        )
+        device.api.async_set_nuos_mode.assert_awaited_once_with(
+            "gw-1", NuosSplitOperativeMode.GREEN_PLUS
         )
 
     def test_lydos_hybrid_settings_accessors_and_all_commands(self):

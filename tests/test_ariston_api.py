@@ -261,6 +261,18 @@ class AristonAPIRequestTests(unittest.TestCase):
                 post.assert_called_once()
                 self.assertIn("gw-1", post.call_args.args[0])
 
+    def test_sync_velis_slp_holiday_endpoint_sends_date_or_clear_value(self):
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+        endpoint = "https://example.test/api/velis/slpPlantData/gw-1/holiday"
+
+        for holiday_end_date in ("2026-12-31T00:00:00", None):
+            with self.subTest(holiday_end_date=holiday_end_date):
+                with patch.object(api, "_post") as post:
+                    result = api.set_velis_slp_holiday("gw-1", holiday_end_date)
+
+                self.assertIsNone(result)
+                post.assert_called_once_with(endpoint, {"new": holiday_end_date})
+
     def test_sync_request_empty_response_and_retry_failure_paths(self):
         api = AristonAPI("user", "password")
         request = api._AristonAPI__request
@@ -402,6 +414,25 @@ class AristonAPIRequestTests(unittest.TestCase):
                     self.assertIsNone(result)
                     post.assert_awaited_once()
                     self.assertIn("gw-1", post.await_args.args[0])
+
+        asyncio.run(run_all())
+
+    def test_async_velis_slp_holiday_endpoint_sends_date_or_clear_value(self):
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+        endpoint = "https://example.test/api/velis/slpPlantData/gw-1/holiday"
+
+        async def run_all():
+            for holiday_end_date in ("2026-12-31T00:00:00", None):
+                with self.subTest(holiday_end_date=holiday_end_date):
+                    with patch.object(api, "_async_post", new=AsyncMock()) as post:
+                        result = await api.async_set_velis_slp_holiday(
+                            "gw-1", holiday_end_date
+                        )
+
+                    self.assertIsNone(result)
+                    post.assert_awaited_once_with(
+                        endpoint, {"new": holiday_end_date}
+                    )
 
         asyncio.run(run_all())
 
