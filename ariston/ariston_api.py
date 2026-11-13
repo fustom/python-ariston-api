@@ -978,7 +978,11 @@ class AristonAPI:
             params,
         )
 
-        async with aiohttp.ClientSession() as session:
+        # Apply an explicit total timeout so a stalled request fails fast
+        # instead of relying on aiohttp's 5 minute default. This mirrors the
+        # 30 second timeout used by the synchronous `requests` path.
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             response = await session.request(
                 method, path, params=params, json=body, headers=headers
             )
