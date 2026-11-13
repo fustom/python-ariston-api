@@ -229,7 +229,6 @@ class NuosSplitOperativeMode(WaterHeaterMode):
     """NuosSplit operative mode enum"""
 
     GREEN = 0
-    COMFORT = 1
     FAST = 2
     IMEMORY = 3
     GREEN_PLUS = 6
