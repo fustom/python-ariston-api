@@ -195,17 +195,21 @@ class AristonNuosSplitDevice(AristonVelisDevice):
 
     def set_water_heater_operation_mode(self, operation_mode: str):
         """Set water heater operation mode"""
-        self.api.set_nuos_mode(self.gw, NuosSplitOperativeMode[operation_mode])
-        self.data[NuosSplitProperties.MODE] = NuosSplitOperativeMode[
+        old_value = self.water_heater_mode_value if self.water_heater_mode_value is not None else 1
+        self.api.set_nuos_mode(
+            self.gw, NuosSplitOperativeMode[operation_mode], old_value
+        )
+        self.data[NuosSplitProperties.OP_MODE] = NuosSplitOperativeMode[
             operation_mode
         ].value
 
     async def async_set_water_heater_operation_mode(self, operation_mode: str):
         """Async set water heater operation mode"""
+        old_value = self.water_heater_mode_value if self.water_heater_mode_value is not None else 1
         await self.api.async_set_nuos_mode(
-            self.gw, NuosSplitOperativeMode[operation_mode]
+            self.gw, NuosSplitOperativeMode[operation_mode], old_value
         )
-        self.data[NuosSplitProperties.MODE] = NuosSplitOperativeMode[
+        self.data[NuosSplitProperties.OP_MODE] = NuosSplitOperativeMode[
             operation_mode
         ].value
 
