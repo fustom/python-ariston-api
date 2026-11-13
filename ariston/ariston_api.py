@@ -60,6 +60,14 @@ class AristonAPI:
         self.__api_url = api_url
         self.__token = ""
         self.__user_agent = user_agent
+    
+    @property
+    def username(self) -> str:
+        return self.__username
+
+    @property
+    def password(self) -> str:
+        return self.__password
 
     def connect(self) -> bool:
         """Login to ariston cloud and get token"""

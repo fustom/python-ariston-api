@@ -6,6 +6,8 @@ import asyncio
 import logging
 from datetime import date
 from typing import Any, Optional
+import asyncio
+from .legacy_r2_client import AristonR2LegacyClient, PLANT_MODE_VALUES
 
 from .ariston_api import AristonAPI
 from .const import (
@@ -46,6 +48,7 @@ class AristonGalevoDevice(AristonDevice):
         self.consumptions_settings: dict[str, Any] = dict()
         self.energy_account: dict[str, Any] = dict()
         self.menu_items: list[dict[str, Any]] = list()
+        self._legacy_client: AristonR2LegacyClient | None = None
 
     @property
     def consumption_type(self) -> str:
@@ -56,6 +59,13 @@ class AristonGalevoDevice(AristonDevice):
     def plant_mode_supported(self) -> bool:
         """Returns whether plant mode is supported"""
         return True
+
+    def _get_legacy_client(self) -> AristonR2LegacyClient:
+        if self._legacy_client is None:
+            self._legacy_client = AristonR2LegacyClient(
+                self.api.username, self.api.password
+            )
+        return self._legacy_client
 
     def _update_state(self) -> None:
         """Set custom features"""
@@ -884,8 +894,74 @@ class AristonGalevoDevice(AristonDevice):
         self.set_item_by_id(DeviceProperties.PLANT_MODE, plant_mode.value)
 
     async def async_set_plant_mode(self, plant_mode: PlantMode):
-        """Async set plant mode"""
+        """Async set plant mode, with fallback to the legacy /R2/ write
+        path if the modern REST v2 write is confirmed to have no real
+        effect on the device (observed on some Elco/BSB heat pumps that
+        are classified as GALEVO by the cloud, but whose physical unit
+        does not react to the modern write endpoint)."""
+        previous_value = self._get_item_by_id(
+            DeviceProperties.PLANT_MODE, PropertyType.VALUE, 0
+        )
+
         await self.async_set_item_by_id(DeviceProperties.PLANT_MODE, plant_mode.value)
+
+        # Give the cloud a moment to propagate, then verify.
+        # Confirmed method name: async_update_state() calls
+        # self.api.async_get_properties(...) - the same REST v2 read
+        # channel, which we've confirmed reflects real device state
+        # correctly (only the *write* path is broken for these devices).
+        # 2s is a starting point - tune based on real-world testing;
+        # too short risks a false-positive fallback trigger if the cloud
+        # hasn't propagated yet.
+        await asyncio.sleep(2)
+        await self.async_update_state()
+        confirmed_value = self._get_item_by_id(
+            DeviceProperties.PLANT_MODE, PropertyType.VALUE, 0
+        )
+
+        if confirmed_value == plant_mode.value:
+            _LOGGER.debug(
+                "PlantMode set via REST v2 confirmed (value=%s)", plant_mode.value
+            )
+            return
+
+        _LOGGER.warning(
+            "PlantMode write via REST v2 had no effect (still %s, expected "
+            "%s) - falling back to legacy /R2/ endpoint",
+            confirmed_value,
+            plant_mode.value,
+        )
+
+        plant_mode_text = self._get_item_by_id(
+            DeviceProperties.PLANT_MODE, PropertyType.OPT_TEXTS, 0
+        )[
+            self._get_item_by_id(
+                DeviceProperties.PLANT_MODE, PropertyType.OPTIONS, 0
+            ).index(plant_mode.value)
+        ]
+
+        legacy_client = self._get_legacy_client()
+
+        # First-time use: the legacy client needs a seeded viewModel
+        # template, since the site provides no clean read endpoint for it.
+        # In a first implementation this would need to be captured once
+        # (manually, via HAR, as done during development) and shipped as
+        # a static fallback template bundled with this module - see
+        # legacy_r2_client.py docstring. A future improvement could try
+        # to extract it from the initial /R2/Plant/Index page HTML
+        # instead, removing the need for a static template entirely.
+        if legacy_client._viewmodel_cache is None:
+            raise NotImplementedError(
+                "Legacy fallback requires a seeded viewModel template - "
+                "see legacy_r2_client.py docstring for how to obtain one."
+            )
+
+        await legacy_client.async_set_plant_mode(self.gw, plant_mode_text)
+        self._set_item_by_id(DeviceProperties.PLANT_MODE, plant_mode.value, 0)
+
+    #async def async_set_plant_mode(self, plant_mode: PlantMode):
+    #    """Async set plant mode"""
+    #    await self.async_set_item_by_id(DeviceProperties.PLANT_MODE, plant_mode.value)
 
     def set_zone_mode(self, zone_mode: ZoneMode, zone: int):
         """Set zone mode"""
