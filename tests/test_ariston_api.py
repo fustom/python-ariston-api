@@ -91,6 +91,10 @@ class AristonAPIRequestTests(unittest.TestCase):
 
         self.assertEqual(devices, [{"gw": "gateway-1"}])
         login_call, devices_call = request.call_args_list
+        # requests expects seconds: a regression to milliseconds (30000) would
+        # let a hung connection block the caller for hours.
+        self.assertEqual(login_call.kwargs["timeout"], 30)
+        self.assertEqual(devices_call.kwargs["timeout"], 30)
         self.assertEqual(login_call.args[0], "POST")
         self.assertEqual(
             login_call.kwargs["json"],
