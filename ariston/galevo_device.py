@@ -7,7 +7,7 @@ import logging
 from datetime import date
 from typing import Any, Optional
 
-from .ariston_api import AristonAPI
+from .ariston_api import AristonAPI, ConnectionException
 from .const import (
     ConsumptionProperties,
     ConsumptionTimeInterval,
@@ -99,7 +99,11 @@ class AristonGalevoDevice(AristonDevice):
             self.language_tag,
             self.umsys,
         )
-        self.menu_items = self.api.get_menu_items(self.gw)
+        try:
+            self.menu_items = self.api.get_menu_items(self.gw)
+        except ConnectionException as error:
+            if not self._should_retain_menu_items_after_error(error):
+                raise
         self._update_state()
 
     async def async_update_state(self) -> None:
@@ -114,9 +118,34 @@ class AristonGalevoDevice(AristonDevice):
                 self.language_tag,
                 self.umsys,
             ),
-            self.api.async_get_menu_items(self.gw),
+            self._async_get_menu_items(),
         )
         self._update_state()
+
+    async def _async_get_menu_items(self) -> list[dict[str, Any]]:
+        """Get menu items while retaining the last values for server errors."""
+        try:
+            return await self.api.async_get_menu_items(self.gw)
+        except ConnectionException as error:
+            if not self._should_retain_menu_items_after_error(error):
+                raise
+            return self.menu_items
+
+    def _should_retain_menu_items_after_error(
+        self, error: ConnectionException
+    ) -> bool:
+        """Log and identify menu server errors that can use cached values."""
+        status = error.args[0] if error.args else None
+        if status not in (500, 550):
+            return False
+
+        _LOGGER.warning(
+            "Could not fetch menu items for gateway %s (HTTP %s); "
+            "retaining the last successful values",
+            self.gw,
+            status,
+        )
+        return True
 
     def _get_features(self) -> None:
         """Set custom features"""
