@@ -152,6 +152,26 @@ class NuosGreenR2Tests(unittest.TestCase):
         self.assertEqual(NuosSplitOperativeMode.FAST.value, 2)
         self.assertEqual(NuosSplitOperativeMode.AUTO.value, 3)  # was mislabeled
 
+    def test_imemory_alias_preserved(self) -> None:
+        """IMEMORY (the pre-rename public name) still resolves to AUTO = 3."""
+        self.assertIs(NuosSplitOperativeMode.IMEMORY, NuosSplitOperativeMode.AUTO)
+        self.assertEqual(NuosSplitOperativeMode["IMEMORY"].value, 3)
+        values = [mode.value for mode in NuosSplitOperativeMode]
+        self.assertEqual(values.count(3), 1)  # alias adds no duplicate option
+        self.assertNotIn("IMEMORY", [mode.name for mode in NuosSplitOperativeMode])
+
+    def test_imemory_string_still_sets_auto(self) -> None:
+        """The string-based setter accepts the old name and writes value 3."""
+        device = _device()
+        device.api.set_nuos_mode = MagicMock()
+
+        device.set_water_heater_operation_mode("IMEMORY")
+
+        device.api.set_nuos_mode.assert_called_once_with(
+            device.gw, NuosSplitOperativeMode.AUTO
+        )
+        self.assertEqual(device.data["opMode"], 3)
+
     # -- async device setter routing --
 
     def test_green_write_routes_through_r2(self) -> None:

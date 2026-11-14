@@ -240,19 +240,22 @@ class NuosSplitPlantMode(Enum):
     PROGRAM = 2
 
 
-@unique
 class NuosSplitOperativeMode(WaterHeaterMode):
     """NuosSplit operative mode enum.
 
     Official range (web app, 2026-10-18): Green=0, Comfort=1, Fast=2,
     Auto=3, HcHp=4, Electric=5, GreenPlus=6. Only the modes the device
-    reliably accepts are exposed; IMEMORY was a mislabel of Auto=3.
+    reliably accepts are exposed; value 3 was mislabeled IMEMORY before.
+    IMEMORY is kept as a deprecated alias of AUTO so existing callers
+    (attribute access and the string-based device setter) keep working;
+    iteration and the mode options stay on the canonical AUTO name.
     """
 
     GREEN = 0
     COMFORT = 1
     FAST = 2
     AUTO = 3
+    IMEMORY = 3  # deprecated alias of AUTO (pre-rename public name)
     GREEN_PLUS = 6
 
 
