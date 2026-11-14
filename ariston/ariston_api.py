@@ -1214,32 +1214,6 @@ class AristonAPI:
             {setting: {"new": value, "old": old_value}},
         )
 
-    def set_velis_holiday(
-        self,
-        gw_id: str,
-        holiday_end_date: Optional[str],
-    ) -> None:
-        """Set Velis holiday"""
-        self._post(
-            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/holiday",
-            {
-                "new": holiday_end_date,
-            },
-        )
-
-    async def async_set_velis_holiday(
-        self,
-        gw_id: str,
-        holiday_end_date: Optional[str],
-    ) -> None:
-        """Async set Velis holiday"""
-        await self._async_post(
-            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/holiday",
-            {
-                "new": holiday_end_date,
-            },
-        )
-
     async def async_get_thermostat_time_progs(
         self, gw_id: str, zone: int, umsys: str
     ) -> Optional[dict[str, Any]]:

@@ -99,11 +99,13 @@ class AristonVelisDevice(AristonDevice, AristonVelisBaseDevice, ABC):
 
     def set_velis_holiday(self, holiday_end: Optional[date]) -> None:
         """Set Velis holiday on device"""
-        self.api.set_velis_holiday(self.gw, self._create_holiday_end_date(holiday_end))
+        self.api.set_velis_slp_holiday(
+            self.gw, self._create_holiday_end_date(holiday_end)
+        )
 
     async def async_set_velis_holiday(self, holiday_end: Optional[date]) -> None:
         """Async set Velis holiday on device"""
-        await self.api.async_set_velis_holiday(
+        await self.api.async_set_velis_slp_holiday(
             self.gw, self._create_holiday_end_date(holiday_end)
         )
 
