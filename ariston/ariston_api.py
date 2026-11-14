@@ -497,6 +497,23 @@ class AristonAPI:
             },
         )
 
+    def set_velis_slp_holiday(
+        self,
+        gw_id: str,
+        holiday_end_date: Optional[str],
+    ) -> None:
+        """Set holiday on a Velis Slp (Nuos) device.
+
+        Pass an ISO-formatted end date string to schedule the holiday, or
+        ``None`` to clear it.
+        """
+        self._post(
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/holiday",
+            {
+                "new": holiday_end_date,
+            },
+        )
+
     def get_bus_errors(self, gw_id: str) -> list[Any]:
         """Get bus errors"""
         bus_errors = self._get(
@@ -532,7 +549,7 @@ class AristonAPI:
             params,
         )
         response = requests.request(
-            method, path, params=params, json=body, headers=headers, timeout=30000
+            method, path, params=params, json=body, headers=headers, timeout=30
         )
         if not response.ok:
             match response.status_code:
@@ -1245,6 +1262,23 @@ class AristonAPI:
             },
         )
 
+    async def async_set_velis_slp_holiday(
+        self,
+        gw_id: str,
+        holiday_end_date: Optional[str],
+    ) -> None:
+        """Async set holiday on a Velis Slp (Nuos) device.
+
+        Pass an ISO-formatted end date string to schedule the holiday, or
+        ``None`` to clear it.
+        """
+        await self._async_post(
+            f"{self.__api_url}{ARISTON_VELIS}/{PlantData.Slp.value}/{gw_id}/holiday",
+            {
+                "new": holiday_end_date,
+            },
+        )
+
     async def async_get_bus_errors(self, gw_id: str) -> list[Any]:
         """Async get bus errors"""
         bus_errors = await self._async_get(
@@ -1280,7 +1314,11 @@ class AristonAPI:
             params,
         )
 
-        async with aiohttp.ClientSession() as session:
+        # Apply an explicit total timeout so a stalled request fails fast
+        # instead of relying on aiohttp's 5 minute default. This mirrors the
+        # 30 second timeout used by the synchronous `requests` path.
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             response = await session.request(
                 method, path, params=params, json=body, headers=headers
             )

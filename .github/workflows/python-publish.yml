@@ -26,6 +26,21 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: '3.x'
+    - name: Verify package version matches release tag
+      run: |
+        python - <<'PY'
+        import os
+        import tomllib
+
+        with open("pyproject.toml", "rb") as pyproject_file:
+            package_version = tomllib.load(pyproject_file)["project"]["version"]
+
+        release_version = os.environ["GITHUB_REF_NAME"]
+        if package_version != release_version:
+            raise SystemExit(
+                f"Package version {package_version} does not match release tag {release_version}"
+            )
+        PY
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip

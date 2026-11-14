@@ -5,6 +5,7 @@ import unittest
 from datetime import date
 from unittest.mock import AsyncMock, Mock
 
+from ariston.ariston_api import ConnectionException
 from ariston.const import (
     ConsumptionProperties,
     ConsumptionTimeInterval,
@@ -293,6 +294,93 @@ class AristonGalevoDeviceTests(unittest.TestCase):
 
         asyncio.run(refresh_without_features())
         async_no_features.api.async_get_features_for_device.assert_awaited_once_with("gw-1")
+
+    def test_menu_http_500_and_550_preserve_previous_items_and_refresh_state(self):
+        for status in (500, 550):
+            with self.subTest(status=status):
+                device = self.make_device()
+                previous_menu_items = list(device.menu_items)
+                fresh_data = self.make_data()
+                fresh_data["items"][0][PropertyType.VALUE] = 42
+                device.api.async_get_properties = AsyncMock(return_value=fresh_data)
+                device.api.async_get_menu_items = AsyncMock(
+                    side_effect=ConnectionException(status)
+                )
+
+                async def refresh():
+                    await device.async_update_state()
+
+                with self.assertLogs("ariston.galevo_device", level="WARNING"):
+                    asyncio.run(refresh())
+
+                self.assertEqual(device.data, fresh_data)
+                self.assertEqual(device.menu_items, previous_menu_items)
+                self.assertEqual(device.signal_strength_value, 4)
+
+    def test_menu_http_failure_on_first_refresh_and_recovery(self):
+        device = self.make_device()
+        device.menu_items = []
+        device.api.async_get_properties = AsyncMock(return_value=self.make_data())
+        device.api.async_get_menu_items = AsyncMock(
+            side_effect=[ConnectionException(500), [{"id": 1, PropertyType.VALUE: 3}]]
+        )
+
+        async def refresh_twice():
+            await device.async_update_state()
+            self.assertEqual(device.menu_items, [])
+            self.assertEqual(device.data, self.make_data())
+            await device.async_update_state()
+
+        with self.assertLogs("ariston.galevo_device", level="WARNING"):
+            asyncio.run(refresh_twice())
+
+        self.assertEqual(device.menu_items, [{"id": 1, PropertyType.VALUE: 3}])
+
+    def test_primary_properties_and_non_transient_menu_errors_still_raise(self):
+        device = self.make_device()
+        device.api.async_get_properties = AsyncMock(
+            side_effect=ConnectionException(500)
+        )
+        device.api.async_get_menu_items = AsyncMock(return_value=device.menu_items)
+
+        async def refresh_primary_failure():
+            await device.async_update_state()
+
+        with self.assertRaises(ConnectionException):
+            asyncio.run(refresh_primary_failure())
+
+        device.api.async_get_properties = AsyncMock(return_value=self.make_data())
+        device.api.async_get_menu_items = AsyncMock(
+            side_effect=ConnectionException(401)
+        )
+
+        async def refresh_menu_auth_failure():
+            await device.async_update_state()
+
+        with self.assertRaises(ConnectionException):
+            asyncio.run(refresh_menu_auth_failure())
+
+    def test_sync_menu_http_failure_preserves_previous_items(self):
+        device = self.make_device()
+        previous_menu_items = list(device.menu_items)
+        fresh_data = self.make_data()
+        fresh_data["items"][0][PropertyType.VALUE] = 42
+        device.api.get_properties.return_value = fresh_data
+        device.api.get_menu_items.side_effect = ConnectionException(500)
+
+        with self.assertLogs("ariston.galevo_device", level="WARNING"):
+            device.update_state()
+
+        self.assertEqual(device.data, fresh_data)
+        self.assertEqual(device.menu_items, previous_menu_items)
+
+    def test_sync_non_transient_menu_errors_still_raise(self):
+        device = self.make_device()
+        device.api.get_properties.return_value = self.make_data()
+        device.api.get_menu_items.side_effect = ConnectionException(401)
+
+        with self.assertRaises(ConnectionException):
+            device.update_state()
 
     def test_consumption_settings_and_energy_account_paths(self):
         device = self.make_device()
