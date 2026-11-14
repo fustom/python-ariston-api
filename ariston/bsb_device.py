@@ -129,6 +129,11 @@ class AristonBsbDevice(AristonDevice):
         return BsbZoneMode.OFF.value in self.get_zone_mode_options(zone)
 
     @property
+    def is_hp_on_value(self) -> bool:
+        """Get is heating_pump on value"""
+        return self.data.get(BsbDeviceProperties.HP_ON, False)
+
+    @property
     def is_flame_on_value(self) -> bool:
         """Get is flame on value"""
         return self.data.get(BsbDeviceProperties.FLAME, False)
@@ -263,13 +268,25 @@ class AristonBsbDevice(AristonDevice):
 
     def get_measured_temp_value(self, zone: int) -> int:
         """Get zone measured temp value"""
-        return self.get_zone(zone).get(BsbZoneProperties.ROOM_TEMP, 0)
+        return self.get_zone(self.zone_numbers[0]).get(BsbZoneProperties.ROOM_TEMP, 0)
 
     def get_measured_temp_decimals(self, _) -> int:
         """Get zone measured temp decimals"""
         return 1
 
     def get_measured_temp_unit(self, _) -> str:
+        """Get zone measured temp unit"""
+        return "°C"
+
+    def get_desired_room_temp_value(self, zone: int) -> int:
+        """Get desired room temp value"""
+        return self.get_zone(self.zone_numbers[0]).get(BsbZoneProperties.DESIRED_ROOM_TEMP, 0)
+
+    def get_desired_room_temp_decimals(self, _) -> int:
+        """Get zone measured temp decimals"""
+        return 1
+
+    def get_desired_room_temp_unit(self, _) -> str:
         """Get zone measured temp unit"""
         return "°C"
 
