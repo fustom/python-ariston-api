@@ -14,14 +14,6 @@ from ariston.ariston_api import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _reset_blocked_until():
-    """Isolate the class-level block window between tests."""
-    AristonAPI._blocked_until = 0.0
-    yield
-    AristonAPI._blocked_until = 0.0
-
-
 def _api() -> AristonAPI:
     return AristonAPI("user", "pass")
 
@@ -59,15 +51,16 @@ def test_429_parses_wait_seconds():
     ]
     http = MagicMock(side_effect=responses)
     sleeps: list[int] = []
+    api = _api()
     with patch("ariston.ariston_api.requests.request", http), patch(
         "ariston.ariston_api.time.sleep", side_effect=sleeps.append
     ):
-        result = _api()._get("https://example/api")
+        result = api._get("https://example/api")
 
     assert result == {"ok": True}
     assert http.call_count == 2  # exactly one retry
     assert sleeps == [67]  # parsed 66 + 1s margin
-    assert AristonAPI._blocked_until > 0  # block window was set
+    assert api._blocked_until > 0  # block window was set
 
 
 def test_429_without_parsable_body():
@@ -102,15 +95,34 @@ def test_429_twice_raises():
     assert http.call_count == 2  # one retry, then raise — no infinite loop
 
 
-def test_blocked_until_short_circuits(monkeypatch):
-    monkeypatch.setattr(AristonAPI, "_blocked_until", time.time() + 30)
-    http = MagicMock()
+def test_blocked_until_short_circuits():
     api = _api()
+    api._blocked_until = time.time() + 30
+    http = MagicMock()
     with patch("ariston.ariston_api.requests.request", http):
         with pytest.raises(ConnectionException):
             api._get("https://example/api")
 
     http.assert_not_called()  # no network call inside the block window
+
+
+def test_block_window_is_per_instance():
+    """A 429 on one instance must not silence other instances."""
+    blocked = _api()
+    other = _api()
+    http = MagicMock(
+        side_effect=[
+            _sync_response(429, b"Requests are blocked for 30 seconds"),
+            _sync_response(200, b"{}", {"ok": True}),
+        ]
+    )
+    with patch("ariston.ariston_api.requests.request", http), patch(
+        "ariston.ariston_api.time.sleep"
+    ):
+        assert blocked._get("https://example/api") == {"ok": True}
+
+    assert blocked._blocked_until > 0
+    assert other._blocked_until == 0.0  # untouched by the other instance's 429
 
 
 # ---------------------------------------------------------------------------
@@ -182,10 +194,10 @@ def test_async_429_parses_and_retries():
     assert sleeps == [67]  # parsed 66 + 1s margin
 
 
-def test_async_blocked_until_short_circuits(monkeypatch):
-    monkeypatch.setattr(AristonAPI, "_blocked_until", time.time() + 30)
+def test_async_blocked_until_short_circuits():
     calls: list[int] = []
     api = _api()
+    api._blocked_until = time.time() + 30
 
     async def run() -> None:
         with patch(
@@ -198,3 +210,26 @@ def test_async_blocked_until_short_circuits(monkeypatch):
     asyncio.run(run())
 
     assert calls == []  # no network call inside the block window
+
+
+def test_async_block_window_is_per_instance():
+    """Async twin: a 429 on one instance must not silence other instances."""
+    blocked = _api()
+    other = _api()
+    responses = [
+        _FakeAiohttpResponse(429, b"Requests are blocked for 30 seconds"),
+        _FakeAiohttpResponse(200, b"{}", {"ok": True}),
+    ]
+    calls: list[int] = []
+
+    async def run() -> Any:
+        with patch(
+            "ariston.ariston_api.aiohttp.ClientSession",
+            _fake_session_cls(responses, calls),
+        ), patch("ariston.ariston_api.asyncio.sleep"):
+            return await blocked._async_get("https://example/api")
+
+    assert asyncio.run(run()) == {"ok": True}
+
+    assert blocked._blocked_until > 0
+    assert other._blocked_until == 0.0  # untouched by the other instance's 429

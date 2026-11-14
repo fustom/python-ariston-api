@@ -76,10 +76,6 @@ class ConnectionException(Exception):
 class AristonAPI:
     """Ariston API class"""
 
-    # Shared across all instances: one 429 silences every caller (all three
-    # HA coordinators) until the block window has passed.
-    _blocked_until: float = 0.0
-
     def __init__(
         self,
         username: str,
@@ -97,6 +93,12 @@ class AristonAPI:
         # needs a running event loop) and logged in on first use.
         self.__r2_cookies: Optional[aiohttp.CookieJar] = None
         self.__r2_logged_in = False
+        # Per-instance 429 block window: instances for different accounts or
+        # API URLs must not silence each other; the three coordinators for
+        # one account still share one API instance.
+        self._blocked_until = 0.0
+        # Sync (requests) R2 web-app session; created lazily on first use.
+        self.__r2_requests_session: Optional[requests.Session] = None
 
     def _r2_cookies(self) -> aiohttp.CookieJar:
         """Lazily create the R2 cookie jar (requires a running loop)."""
@@ -513,7 +515,7 @@ class AristonAPI:
         is_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Request with requests"""
-        if not is_retry and time.time() < AristonAPI._blocked_until:
+        if not is_retry and time.time() < self._blocked_until:
             raise ConnectionException(
                 429,
                 "Rate limited; skipping request until the block window ends",
@@ -572,10 +574,10 @@ class AristonAPI:
         params: Optional[dict[str, Any]],
         body: Any,
     ) -> Optional[dict[str, Any]]:
-        """Sleep out the 429 block window, retry once, share the deadline."""
+        """Sleep out the 429 block window, retry once, per-instance deadline."""
         content = response.content
         wait_seconds = _rate_limit_wait_seconds(content)
-        AristonAPI._blocked_until = time.time() + wait_seconds
+        self._blocked_until = time.time() + wait_seconds
         if not is_retry:
             time.sleep(wait_seconds)
             return self.__request(method, path, params, body, True)
@@ -584,6 +586,99 @@ class AristonAPI:
     def _get(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
         """GET request"""
         return self.__request("GET", path, params, None)
+
+    def _r2_session(self) -> requests.Session:
+        """Lazily create the R2 requests session (holds the auth cookies)."""
+        if self.__r2_requests_session is None:
+            self.__r2_requests_session = requests.Session()
+            self.__r2_requests_session.headers["User-Agent"] = ARISTON_R2_USER_AGENT
+        return self.__r2_requests_session
+
+    def _r2_login(self) -> None:
+        """Log in to the R2 web app (form + anti-forgery token, cookie session)."""
+        self.__r2_logged_in = False
+        session = self._r2_session()
+        login_page = session.get(ARISTON_R2_LOGIN_PAGE)
+        if login_page.status_code != 200:
+            raise ConnectionException(
+                f"R2 login page returned HTTP {login_page.status_code}"
+            )
+        match = re.search(
+            r'name="__RequestVerificationToken"[^>]*value="([^"]+)"', login_page.text
+        )
+        if match is None:
+            raise ConnectionException(
+                "R2 login page has no __RequestVerificationToken"
+            )
+        login = session.post(
+            ARISTON_R2_LOGIN_PAGE,
+            data={
+                "__RequestVerificationToken": match.group(1),
+                "email": self.__username,
+                "password": self.__password,
+                "rememberMe": "false",
+            },
+            allow_redirects=False,
+        )
+        if login.status_code not in (200, 302):
+            raise ConnectionException(f"R2 login returned HTTP {login.status_code}")
+        self.__r2_logged_in = True
+
+    def _r2_get_slp_plant_data(self, gw_id: str) -> dict[str, Any]:
+        """Read the Nuos Split plant data through the R2 web app."""
+        response = self._r2_session().get(ARISTON_R2_SLP_GET_DATA.format(gw_id))
+        if response.status_code != 200:
+            raise ConnectionException(
+                f"R2 GetData returned HTTP {response.status_code}"
+            )
+        try:
+            body = response.json()
+            return body["data"]["plantData"]
+        except (KeyError, ValueError) as err:
+            # An expired R2 forms-auth session redirects to the login page:
+            # HTTP 200 text/html. Surface as ConnectionException so the
+            # caller's fresh-login retry fires.
+            raise ConnectionException(
+                "R2 GetData returned no plant data (session expired?)"
+            ) from err
+
+    def _r2_post_set_data(self, gw_id: str, payload: dict[str, Any]) -> None:
+        """POST the R2 SetData envelope and validate the response."""
+        response = self._r2_session().post(
+            ARISTON_R2_SLP_SET_DATA.format(gw_id),
+            json=payload,
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        if response.status_code != 200:
+            raise ConnectionException(
+                f"R2 SetData returned HTTP {response.status_code}"
+            )
+        try:
+            body = response.json()
+        except ValueError as err:
+            raise ConnectionException(
+                "R2 SetData returned a non-JSON body (session expired?)"
+            ) from err
+        if isinstance(body, dict) and body.get("success") is False:
+            raise ConnectionException(f"R2 SetData reported failure: {body}")
+
+    def set_nuos_mode_via_r2(self, gw_id: str, value: NuosSplitOperativeMode) -> None:
+        """Set a Nuos Split operative mode through the R2 web app.
+
+        api/v2 operativeMode accepts values 1+ but silently drops 0 (GREEN);
+        this endpoint applies every value — it is what the official app uses.
+        """
+        if not self.__r2_logged_in:
+            self._r2_login()
+        try:
+            plant_data = self._r2_get_slp_plant_data(gw_id)
+        except ConnectionException:
+            # Session may have expired; one fresh login, then retry the read.
+            self._r2_login()
+            plant_data = self._r2_get_slp_plant_data(gw_id)
+        self._r2_post_set_data(
+            gw_id, self._build_nuos_r2_payload(plant_data, value.value)
+        )
 
     async def async_connect(self) -> bool:
         """Async login to ariston cloud and get token"""
@@ -914,6 +1009,12 @@ class AristonAPI:
             await self._async_r2_login()
             plant_data = await self._async_r2_get_slp_plant_data(gw_id)
         payload = self._build_nuos_r2_payload(plant_data, value.value)
+        await self._async_r2_post_set_data(gw_id, payload)
+
+    async def _async_r2_post_set_data(
+        self, gw_id: str, payload: dict[str, Any]
+    ) -> None:
+        """POST the R2 SetData envelope and validate the response."""
         async with aiohttp.ClientSession(
             cookie_jar=self._r2_cookies(),
             headers={
@@ -928,6 +1029,17 @@ class AristonAPI:
                     raise ConnectionException(
                         f"R2 SetData returned HTTP {response.status}"
                     )
+                try:
+                    body = await response.json()
+                except (aiohttp.ContentTypeError, ValueError) as err:
+                    # An expired session turns the POST into a redirect to
+                    # the login page (HTTP 200 text/html) — auth failure,
+                    # not success.
+                    raise ConnectionException(
+                        "R2 SetData returned a non-JSON body (session expired?)"
+                    ) from err
+        if isinstance(body, dict) and body.get("success") is False:
+            raise ConnectionException(f"R2 SetData reported failure: {body}")
 
     async def async_set_bsb_mode(self, gw_id: str, value: BsbOperativeMode) -> None:
         """Async set Bsb mode"""
@@ -1151,7 +1263,7 @@ class AristonAPI:
         is_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Async request with aiohttp"""
-        if not is_retry and time.time() < AristonAPI._blocked_until:
+        if not is_retry and time.time() < self._blocked_until:
             raise ConnectionException(
                 429,
                 "Rate limited; skipping request until the block window ends",
@@ -1222,7 +1334,7 @@ class AristonAPI:
         """Sleep out the 429 block window, retry once, share the deadline."""
         content = await response.content.read()
         wait_seconds = _rate_limit_wait_seconds(content)
-        AristonAPI._blocked_until = time.time() + wait_seconds
+        self._blocked_until = time.time() + wait_seconds
         if not is_retry:
             await asyncio.sleep(wait_seconds)
             return await self.__async_request(method, path, params, body, True)
