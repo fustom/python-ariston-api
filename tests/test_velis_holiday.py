@@ -1,8 +1,10 @@
 """Unit tests for the Velis holiday write (endpoint proven by live write-test)."""
 
 import asyncio
+import unittest
 from datetime import date
 from typing import Any
+from unittest.mock import patch
 
 from ariston.ariston_api import AristonAPI
 from ariston.const import ARISTON_API_URL, ARISTON_VELIS
@@ -52,38 +54,40 @@ def _device() -> AristonVelisDevice:
     return device
 
 
-def test_holiday_end_date_format():
-    assert (
-        AristonVelisDevice._create_holiday_end_date(date(2026, 9, 15))
-        == "2026-09-15T00:00:00"
-    )
-    assert AristonVelisDevice._create_holiday_end_date(None) is None
+class VelisHolidayTests(unittest.TestCase):
+    """Device wrapper delegates to the API holiday pair with date formatting."""
+
+    def test_holiday_end_date_format(self):
+        self.assertEqual(
+            AristonVelisDevice._create_holiday_end_date(date(2026, 9, 15)),
+            "2026-09-15T00:00:00",
+        )
+        self.assertIsNone(AristonVelisDevice._create_holiday_end_date(None))
+
+    def test_async_set_velis_holiday_on_posts_date(self):
+        posts: list = []
+        device = _device()
+        with patch(
+            "ariston.ariston_api.aiohttp.ClientSession", _fake_session_cls(posts)
+        ):
+            asyncio.run(device.async_set_velis_holiday(date(2026, 9, 15)))
+
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0]["path"], EXPECTED_URL)
+        self.assertEqual(posts[0]["json"], {"new": "2026-09-15T00:00:00"})
+
+    def test_async_set_velis_holiday_off_posts_null(self):
+        posts: list = []
+        device = _device()
+        with patch(
+            "ariston.ariston_api.aiohttp.ClientSession", _fake_session_cls(posts)
+        ):
+            asyncio.run(device.async_set_velis_holiday(None))
+
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0]["path"], EXPECTED_URL)
+        self.assertEqual(posts[0]["json"], {"new": None})
 
 
-def test_async_set_velis_holiday_on_posts_date():
-    posts: list = []
-    device = _device()
-    with patch_session(_fake_session_cls(posts)):
-        asyncio.run(device.async_set_velis_holiday(date(2026, 9, 15)))
-
-    assert len(posts) == 1
-    assert posts[0]["path"] == EXPECTED_URL
-    assert posts[0]["json"] == {"new": "2026-09-15T00:00:00"}
-
-
-def test_async_set_velis_holiday_off_posts_null():
-    posts: list = []
-    device = _device()
-    with patch_session(_fake_session_cls(posts)):
-        asyncio.run(device.async_set_velis_holiday(None))
-
-    assert len(posts) == 1
-    assert posts[0]["path"] == EXPECTED_URL
-    assert posts[0]["json"] == {"new": None}
-
-
-def patch_session(fake_cls):
-    """Patch aiohttp.ClientSession inside ariston_api for one test."""
-    from unittest.mock import patch
-
-    return patch("ariston.ariston_api.aiohttp.ClientSession", fake_cls)
+if __name__ == "__main__":
+    unittest.main()
