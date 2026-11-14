@@ -248,10 +248,13 @@ class AristonAPI:
             return settings
         return {}
 
-    def get_menu_items(self, gw_id: str) -> list[dict[str, Any]]:
+    def get_menu_items(
+        self, gw_id: str, menu_items: Optional[str] = None
+    ) -> list[dict[str, Any]]:
         """Get menu items"""
+        query = menu_items if menu_items is not None else MenuItemNames.base_values()
         items = self._get(
-            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={MenuItemNames.values()}"
+            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={query}"
         )
         if items is not None:
             return items
@@ -840,10 +843,13 @@ class AristonAPI:
             return med_plant_settings
         return {}
 
-    async def async_get_menu_items(self, gw_id: str) -> list[dict[str, Any]]:
+    async def async_get_menu_items(
+        self, gw_id: str, menu_items: Optional[str] = None
+    ) -> list[dict[str, Any]]:
         """Async get menu items"""
+        query = menu_items if menu_items is not None else MenuItemNames.base_values()
         items = await self._async_get(
-            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={MenuItemNames.values()}"
+            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={query}"
         )
         if items is not None:
             return items

@@ -511,6 +511,28 @@ class AristonAPIRequestTests(unittest.TestCase):
 
         asyncio.run(exercise())
 
+    def test_menu_items_custom_query_and_groups(self):
+        from ariston.const import MenuItemNames
+
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+        self.assertEqual(MenuItemNames.base_values(), "124,119")
+        self.assertEqual(MenuItemNames.heat_pump_values(), "337,340,341,348,349")
+        self.assertIn("348", MenuItemNames.values())
+
+        with patch.object(api, "_get", return_value=[{"id": 348}]) as request:
+            self.assertEqual(api.get_menu_items("gw-1", "348,349"), [{"id": 348}])
+        self.assertIn("?menuItems=348,349", request.call_args.args[0])
+
+        async def exercise_async():
+            with patch.object(api, "_async_get", new=AsyncMock(return_value=[{"id": 349}])) as areq:
+                self.assertEqual(
+                    await api.async_get_menu_items("gw-1", "348,349"),
+                    [{"id": 349}],
+                )
+            self.assertIn("?menuItems=348,349", areq.call_args.args[0])
+
+        asyncio.run(exercise_async())
+
 
 if __name__ == "__main__":
     unittest.main()

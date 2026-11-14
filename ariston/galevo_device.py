@@ -88,6 +88,42 @@ class AristonGalevoDevice(AristonDevice):
         self.custom_features[DeviceProperties.IS_QUIET] = (
             self.is_quiet_value is not None
         )
+        for menu_item in MenuItemNames:
+            self.custom_features[menu_item.name] = (
+                self._get_menu_item_by_id(menu_item.value, PropertyType.VALUE)
+                is not None
+            )
+
+    def _has_heat_pump_menu_items(self) -> bool:
+        """Return True if the gateway supports heat-pump menu items."""
+        return bool(
+            self.features.get(DeviceFeatures.HP_SYS)
+            or self.features.get(DeviceFeatures.HYBRID_SYS)
+        )
+
+    @staticmethod
+    def _merge_menu_items(
+        base_items: list[dict[str, Any]],
+        extra_items: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Merge menu items lists without duplicating item IDs."""
+        merged: dict[Any, dict[str, Any]] = {}
+        for item in base_items:
+            merged[item.get("id")] = item
+        for item in extra_items:
+            merged[item.get("id")] = item
+        return list(merged.values())
+
+    def _retained_heat_pump_menu_items(self) -> list[dict[str, Any]]:
+        """Return previously cached heat-pump menu items."""
+        hp_ids = {
+            MenuItemNames.CH_BACKUP_RESISTANCE_1.value,
+            MenuItemNames.HP_MODE.value,
+            MenuItemNames.HP_OUTSIDE_AIR_TEMP.value,
+            MenuItemNames.HP_WATER_FLOW_TEMP.value,
+            MenuItemNames.CH_FLOW_TEMP.value,
+        }
+        return [item for item in self.menu_items if item.get("id") in hp_ids]
 
     def update_state(self) -> None:
         """Update the device states from the cloud"""
@@ -101,10 +137,24 @@ class AristonGalevoDevice(AristonDevice):
             self.umsys,
         )
         try:
-            self.menu_items = self.api.get_menu_items(self.gw)
+            menu_items = self.api.get_menu_items(self.gw)
         except ConnectionException as error:
             if not self._should_retain_menu_items_after_error(error):
                 raise
+            menu_items = list(self.menu_items)
+
+        if self._has_heat_pump_menu_items():
+            try:
+                hp_items = self.api.get_menu_items(
+                    self.gw, MenuItemNames.heat_pump_values()
+                )
+            except ConnectionException as error:
+                if not self._should_retain_menu_items_after_error(error):
+                    raise
+                hp_items = self._retained_heat_pump_menu_items()
+            menu_items = self._merge_menu_items(menu_items, hp_items)
+
+        self.menu_items = menu_items
         self._update_state()
 
     async def async_update_state(self) -> None:
@@ -126,11 +176,24 @@ class AristonGalevoDevice(AristonDevice):
     async def _async_get_menu_items(self) -> list[dict[str, Any]]:
         """Get menu items while retaining the last values for server errors."""
         try:
-            return await self.api.async_get_menu_items(self.gw)
+            menu_items = await self.api.async_get_menu_items(self.gw)
         except ConnectionException as error:
             if not self._should_retain_menu_items_after_error(error):
                 raise
-            return self.menu_items
+            menu_items = list(self.menu_items)
+
+        if self._has_heat_pump_menu_items():
+            try:
+                hp_items = await self.api.async_get_menu_items(
+                    self.gw, MenuItemNames.heat_pump_values()
+                )
+            except ConnectionException as error:
+                if not self._should_retain_menu_items_after_error(error):
+                    raise
+                hp_items = self._retained_heat_pump_menu_items()
+            menu_items = self._merge_menu_items(menu_items, hp_items)
+
+        return menu_items
 
     def _should_retain_menu_items_after_error(
         self, error: ConnectionException
@@ -392,7 +455,12 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def ch_flow_temp_value(self) -> Optional[str]:
         """Get central heating flow temperature value"""
-        return self._get_item_by_id(DeviceProperties.CH_FLOW_TEMP, PropertyType.VALUE)
+        value = self._get_item_by_id(DeviceProperties.CH_FLOW_TEMP, PropertyType.VALUE)
+        if value is not None:
+            return value
+        return self._get_menu_item_by_id(
+            MenuItemNames.CH_FLOW_TEMP.value, PropertyType.VALUE
+        )
 
     @property
     def outside_temp_value(self) -> str:
@@ -414,7 +482,12 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def ch_flow_temp_unit(self) -> str:
         """Get central heating flow temperature unit"""
-        return self._get_item_by_id(DeviceProperties.CH_FLOW_TEMP, PropertyType.UNIT)
+        unit = self._get_item_by_id(DeviceProperties.CH_FLOW_TEMP, PropertyType.UNIT)
+        if unit is not None:
+            return unit
+        return self._get_menu_item_by_id(
+            MenuItemNames.CH_FLOW_TEMP.value, PropertyType.UNIT
+        )
 
     @property
     def is_flame_on_value(self) -> bool:
@@ -509,6 +582,68 @@ class AristonGalevoDevice(AristonDevice):
         """Get ch return temp unit"""
         return self._get_menu_item_by_id(
             MenuItemNames.CH_RETURN_TEMP.value, PropertyType.UNIT
+        )
+
+    @property
+    def ch_backup_resistance_1_value(self) -> Optional[bool]:
+        """Get CH backup resistance 1 state"""
+        value = self._get_menu_item_by_id(
+            MenuItemNames.CH_BACKUP_RESISTANCE_1.value, PropertyType.VALUE
+        )
+        return bool(value) if value is not None else None
+
+    @property
+    def hp_mode_value(self) -> Optional[str]:
+        """Get heat pump mode text"""
+        value = self._get_menu_item_by_id(
+            MenuItemNames.HP_MODE.value, PropertyType.VALUE
+        )
+        if value is None:
+            return None
+        options = (
+            self._get_menu_item_by_id(
+                MenuItemNames.HP_MODE.value, PropertyType.OPTIONS
+            )
+            or {}
+        )
+        return options.get(str(int(value)), str(value))
+
+    @property
+    def hp_mode_options(self) -> list[str]:
+        """Get unique heat pump mode texts"""
+        options = self._get_menu_item_by_id(
+            MenuItemNames.HP_MODE.value, PropertyType.OPTIONS
+        )
+        if isinstance(options, dict):
+            return list(dict.fromkeys(options.values()))
+        return []
+
+    @property
+    def hp_outside_air_temp_value(self) -> Any:
+        """Get heat pump outside air temp value"""
+        return self._get_menu_item_by_id(
+            MenuItemNames.HP_OUTSIDE_AIR_TEMP.value, PropertyType.VALUE
+        )
+
+    @property
+    def hp_outside_air_temp_unit(self) -> Any:
+        """Get heat pump outside air temp unit"""
+        return self._get_menu_item_by_id(
+            MenuItemNames.HP_OUTSIDE_AIR_TEMP.value, PropertyType.UNIT
+        )
+
+    @property
+    def hp_water_flow_temp_value(self) -> Any:
+        """Get heat pump water flow temp value"""
+        return self._get_menu_item_by_id(
+            MenuItemNames.HP_WATER_FLOW_TEMP.value, PropertyType.VALUE
+        )
+
+    @property
+    def hp_water_flow_temp_unit(self) -> Any:
+        """Get heat pump water flow temp unit"""
+        return self._get_menu_item_by_id(
+            MenuItemNames.HP_WATER_FLOW_TEMP.value, PropertyType.UNIT
         )
 
     def get_measured_temp_unit(self, zone: int) -> str:
@@ -651,16 +786,43 @@ class AristonGalevoDevice(AristonDevice):
             default,
         )
 
-    def _get_menu_item_by_id(self, menu_item_id: int, item_value: str) -> Any:
-        """Get item attribute from data"""
+    def _get_menu_item(self, menu_item_id: int) -> Optional[dict[str, Any]]:
+        """Get raw menu item dict by ID"""
         return next(
             (
-                item.get(item_value)
+                item
                 for item in self.menu_items
                 if item.get("id") == menu_item_id
             ),
             None,
         )
+
+    @staticmethod
+    def _is_menu_item_available(item: Optional[dict[str, Any]]) -> bool:
+        """Return True if a menu item returned a valid non-sentinel value"""
+        if not item or item.get("error"):
+            return False
+        value = item.get(PropertyType.VALUE)
+        if value is None:
+            return False
+        is_enum = bool(item.get("isEnum") or item.get(PropertyType.OPTIONS))
+        if not is_enum and PropertyType.MAX in item:
+            max_val = item[PropertyType.MAX]
+            min_val = item.get(PropertyType.MIN)
+            if value == max_val or (
+                min_val is not None and min_val < 0 and value == min_val
+            ):
+                return False
+        return True
+
+    def _get_menu_item_by_id(self, menu_item_id: int, item_value: str) -> Any:
+        """Get item attribute from data"""
+        item = self._get_menu_item(menu_item_id)
+        if not item:
+            return None
+        if item_value == PropertyType.VALUE and not self._is_menu_item_available(item):
+            return None
+        return item.get(item_value)
 
     @property
     def elect_cost(self) -> Optional[float]:

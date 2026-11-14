@@ -464,6 +464,135 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         asyncio.run(device.async_update_energy())
         self.assertEqual(device.energy_account, {"LastMonth": [{"elect": 3, "cool": 7}]})
 
+    def test_heat_pump_menu_items_availability_getters_and_error_handling(self):
+        device = self.make_device()
+        device.features = {
+            DeviceFeatures.HP_SYS: True,
+            DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}],
+        }
+        base_items = [
+            {"id": MenuItemNames.SIGNAL_STRENGTH.value, PropertyType.VALUE: 80, PropertyType.UNIT: "%"},
+        ]
+        hp_items = [
+            {
+                "id": MenuItemNames.CH_BACKUP_RESISTANCE_1.value,
+                PropertyType.VALUE: 0.0,
+                "isEnum": True,
+                PropertyType.MIN: 0.0,
+                PropertyType.MAX: 1.0,
+            },
+            {
+                "id": MenuItemNames.HP_MODE.value,
+                PropertyType.VALUE: 9.0,
+                "isEnum": True,
+                PropertyType.OPTIONS: {"0": "OFF", "3": "Heating", "9": "Defrost", "17": "Defrost"},
+            },
+            {
+                "id": MenuItemNames.HP_OUTSIDE_AIR_TEMP.value,
+                PropertyType.VALUE: 0.0,
+                PropertyType.UNIT: "°C",
+                "isEnum": False,
+                PropertyType.MIN: -3277.0,
+                PropertyType.MAX: 3276.0,
+            },
+            {
+                "id": MenuItemNames.HP_WATER_FLOW_TEMP.value,
+                PropertyType.VALUE: 33.0,
+                PropertyType.UNIT: "°C",
+                "isEnum": False,
+                PropertyType.MIN: -3277.0,
+                PropertyType.MAX: 3276.0,
+            },
+            {
+                "id": MenuItemNames.CH_FLOW_TEMP.value,
+                PropertyType.VALUE: 3276.0,
+                PropertyType.UNIT: "°C",
+                "isEnum": False,
+                PropertyType.MIN: -3277.0,
+                PropertyType.MAX: 3276.0,
+            },
+        ]
+        data_without_ch_flow = self.make_data()
+        data_without_ch_flow["items"] = [
+            item
+            for item in data_without_ch_flow["items"]
+            if item["id"] != DeviceProperties.CH_FLOW_TEMP
+        ]
+        device.api.get_properties.return_value = data_without_ch_flow
+        device.api.get_menu_items.side_effect = [base_items, hp_items]
+
+        device.update_state()
+
+        self.assertFalse(device.custom_features[MenuItemNames.CH_RETURN_TEMP.name])
+        self.assertTrue(device.custom_features[MenuItemNames.SIGNAL_STRENGTH.name])
+        self.assertTrue(device.custom_features[MenuItemNames.CH_BACKUP_RESISTANCE_1.name])
+        self.assertTrue(device.custom_features[MenuItemNames.HP_MODE.name])
+        self.assertTrue(device.custom_features[MenuItemNames.HP_OUTSIDE_AIR_TEMP.name])
+        self.assertTrue(device.custom_features[MenuItemNames.HP_WATER_FLOW_TEMP.name])
+        self.assertFalse(device.custom_features[MenuItemNames.CH_FLOW_TEMP.name])
+        self.assertFalse(device.custom_features[DeviceProperties.CH_FLOW_TEMP])
+
+        self.assertIs(device.ch_backup_resistance_1_value, False)
+        self.assertEqual(device.hp_mode_value, "Defrost")
+        self.assertEqual(device.hp_mode_options, ["OFF", "Heating", "Defrost"])
+        self.assertEqual(device.hp_outside_air_temp_value, 0.0)
+        self.assertEqual(device.hp_outside_air_temp_unit, "°C")
+        self.assertEqual(device.hp_water_flow_temp_value, 33.0)
+        self.assertEqual(device.hp_water_flow_temp_unit, "°C")
+        self.assertIsNone(device.ch_flow_temp_value)
+        self.assertEqual(device.ch_flow_temp_unit, "°C")
+
+        # Sync 500 on HP menu items retains cached HP entries without failing update_state
+        device.api.get_menu_items.side_effect = [base_items, ConnectionException(500)]
+        with self.assertLogs("ariston.galevo_device", level="WARNING"):
+            device.update_state()
+        self.assertEqual(device.hp_water_flow_temp_value, 33.0)
+
+        # Sync 401 on HP menu items propagates
+        device.api.get_menu_items.side_effect = [base_items, ConnectionException(401)]
+        with self.assertRaises(ConnectionException):
+            device.update_state()
+
+        # Async path + HTTP 500 retention + 401 propagation + sentinel/missing edge cases
+        device.api.async_get_properties = AsyncMock(return_value=data_without_ch_flow)
+        updated_hp = [
+            {"id": MenuItemNames.CH_BACKUP_RESISTANCE_1.value, PropertyType.VALUE: 1.0, "isEnum": True},
+            {"id": MenuItemNames.HP_MODE.value, PropertyType.VALUE: 3.0, PropertyType.OPTIONS: None},
+            {"id": MenuItemNames.HP_OUTSIDE_AIR_TEMP.value, PropertyType.VALUE: None},
+            {"id": MenuItemNames.HP_WATER_FLOW_TEMP.value, PropertyType.VALUE: 25.0, "error": True},
+            {"id": MenuItemNames.CH_FLOW_TEMP.value, PropertyType.VALUE: 31.0, PropertyType.UNIT: "°C"},
+        ]
+        device.api.async_get_menu_items = AsyncMock(side_effect=[base_items, updated_hp])
+        asyncio.run(device.async_update_state())
+        self.assertIs(device.ch_backup_resistance_1_value, True)
+        self.assertEqual(device.hp_mode_value, "3.0")
+        self.assertEqual(device.hp_mode_options, [])
+        self.assertFalse(device.custom_features[MenuItemNames.HP_OUTSIDE_AIR_TEMP.name])
+        self.assertFalse(device.custom_features[MenuItemNames.HP_WATER_FLOW_TEMP.name])
+        self.assertTrue(device.custom_features[MenuItemNames.CH_FLOW_TEMP.name])
+        self.assertTrue(device.custom_features[DeviceProperties.CH_FLOW_TEMP])
+        self.assertEqual(device.ch_flow_temp_value, 31.0)
+        self.assertEqual(device.ch_flow_temp_unit, "°C")
+
+        device.api.async_get_menu_items = AsyncMock(
+            side_effect=[base_items, ConnectionException(550)]
+        )
+        with self.assertLogs("ariston.galevo_device", level="WARNING"):
+            asyncio.run(device.async_update_state())
+        self.assertEqual(device.ch_flow_temp_value, 31.0)
+
+        device.api.async_get_menu_items = AsyncMock(
+            side_effect=[base_items, ConnectionException(401)]
+        )
+        with self.assertRaises(ConnectionException):
+            asyncio.run(device.async_update_state())
+
+        device.menu_items = [{"id": MenuItemNames.HP_MODE.value, PropertyType.VALUE: None}]
+        self.assertIsNone(device.hp_mode_value)
+        self.assertIsNone(device.ch_backup_resistance_1_value)
+        device.menu_items = []
+        self.assertIsNone(device.hp_mode_value)
+
 
 if __name__ == "__main__":
     unittest.main()

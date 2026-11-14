@@ -670,6 +670,30 @@ class MenuItemNames(IntEnum):
 
     CH_RETURN_TEMP = 124
     SIGNAL_STRENGTH = 119
+    CH_BACKUP_RESISTANCE_1 = 337
+    HP_MODE = 340
+    HP_OUTSIDE_AIR_TEMP = 341
+    HP_WATER_FLOW_TEMP = 348
+    CH_FLOW_TEMP = 349
+
+    @classmethod
+    def base_values(cls) -> str:
+        """Return baseline menu items values"""
+        return f"{cls.CH_RETURN_TEMP.value},{cls.SIGNAL_STRENGTH.value}"
+
+    @classmethod
+    def heat_pump_values(cls) -> str:
+        """Return heat-pump menu items values"""
+        return ",".join(
+            str(item.value)
+            for item in (
+                cls.CH_BACKUP_RESISTANCE_1,
+                cls.HP_MODE,
+                cls.HP_OUTSIDE_AIR_TEMP,
+                cls.HP_WATER_FLOW_TEMP,
+                cls.CH_FLOW_TEMP,
+            )
+        )
 
     @classmethod
     def values(cls) -> str:
