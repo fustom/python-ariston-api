@@ -437,7 +437,7 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         device.api = api
         requested_items = DeviceProperties.list(0)[:3]
 
-        async def post(path, body):
+        async def post(path, body, **kwargs):
             if len(body["items"]) > 2:
                 raise ConnectionException(500)
             return {
@@ -450,6 +450,79 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         async def refresh():
             with patch.object(api, "get_items", return_value=requested_items), patch.object(
                 api, "_async_post", new=AsyncMock(side_effect=post)
+            ), patch.object(api, "async_get_menu_items", new=AsyncMock(return_value=[])):
+                await device.async_update_state()
+
+        asyncio.run(refresh())
+        self.assertEqual(
+            [item["id"] for item in device.data["items"]],
+            [item["id"] for item in requested_items],
+        )
+
+    def test_async_update_state_survives_properties_batch_timeout(self):
+        device = self.make_device()
+        api = AristonAPI("user", "password")
+        device.api = api
+        requested_items = DeviceProperties.list(0)[:3]
+
+        async def post(path, body, **kwargs):
+            if len(body["items"]) > 2:
+                raise asyncio.TimeoutError
+            return {
+                "items": [
+                    {"id": item["id"], "zn": item["zn"], "value": 1}
+                    for item in body["items"]
+                ]
+            }
+
+        async def refresh():
+            with patch.object(api, "get_items", return_value=requested_items), patch.object(
+                api, "_async_post", new=AsyncMock(side_effect=post)
+            ), patch.object(api, "async_get_menu_items", new=AsyncMock(return_value=[])):
+                await device.async_update_state()
+
+        asyncio.run(refresh())
+        self.assertEqual(
+            [item["id"] for item in device.data["items"]],
+            [item["id"] for item in requested_items],
+        )
+
+    def test_async_update_state_accepts_slow_properties_response(self):
+        device = self.make_device()
+        api = AristonAPI("user", "password")
+        device.api = api
+        requested_items = DeviceProperties.list(0)[:3]
+
+        class SlowResponse:
+            ok = True
+            content_length = 1
+
+            async def json(self):
+                return {
+                    "items": [
+                        {"id": item["id"], "zn": item["zn"], "value": 1}
+                        for item in requested_items
+                    ]
+                }
+
+        class SlowSession:
+            def __init__(self, timeout):
+                self.timeout = timeout
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc_value, traceback):
+                pass
+
+            async def request(self, *args, **kwargs):
+                if self.timeout.total < 37.8:
+                    raise asyncio.TimeoutError
+                return SlowResponse()
+
+        async def refresh():
+            with patch.object(api, "get_items", return_value=requested_items), patch(
+                "ariston.ariston_api.aiohttp.ClientSession", SlowSession
             ), patch.object(api, "async_get_menu_items", new=AsyncMock(return_value=[])):
                 await device.async_update_state()
 
