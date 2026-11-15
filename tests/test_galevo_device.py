@@ -92,13 +92,41 @@ class AristonGalevoDeviceTests(unittest.TestCase):
 
     def test_async_update_requests_hybrid_menu_items_only_for_hybrid_devices(self):
         device = self.make_device()
-        device.attributes[GalevoDeviceAttribute.HYBRID_SYS] = True
+        device.attributes["hybrSys"] = True
+        device.features = {}
+        device.api.async_get_features_for_device = AsyncMock(
+            return_value={DeviceFeatures.HYBRID_SYS: True}
+        )
         device.api.async_get_properties = AsyncMock(return_value=self.make_data())
         device.api.async_get_menu_items = AsyncMock(return_value=device.menu_items)
 
         asyncio.run(device.async_update_state())
 
         device.api.async_get_menu_items.assert_awaited_once_with(
+            "gw-1", include_hybrid_items=True
+        )
+
+        device.features[DeviceFeatures.HYBRID_SYS] = False
+        device.attributes[GalevoDeviceAttribute.HYBRID_SYS] = True
+        device.api.async_get_menu_items.reset_mock()
+        asyncio.run(device.async_update_state())
+        device.api.async_get_menu_items.assert_awaited_once_with(
+            "gw-1", include_hybrid_items=False
+        )
+
+    def test_sync_update_requests_hybrid_menu_items_from_features(self):
+        device = self.make_device()
+        device.attributes["hybrSys"] = True
+        device.features = {}
+        device.api.get_features_for_device.return_value = {
+            DeviceFeatures.HYBRID_SYS: True
+        }
+        device.api.get_properties.return_value = self.make_data()
+        device.api.get_menu_items.return_value = device.menu_items
+
+        device.update_state()
+
+        device.api.get_menu_items.assert_called_once_with(
             "gw-1", include_hybrid_items=True
         )
 
