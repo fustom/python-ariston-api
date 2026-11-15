@@ -386,6 +386,182 @@ class AristonAPIRequestTests(unittest.TestCase):
 
         asyncio.run(run_all())
 
+    def test_sync_menu_items_fetch_optional_hybrid_groups_and_split_failures(self):
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+        requests = []
+
+        def get(path):
+            requested = path.split("menuItems=", 1)[1]
+            requests.append(requested)
+            if requested == "123,125,115":
+                raise ConnectionException(500)
+            if requested == "125":
+                raise ConnectionException(500)
+            return [{"id": int(item_id)} for item_id in requested.split(",")]
+
+        with patch.object(api, "_get", side_effect=get):
+            items = api.get_menu_items("gw-1", include_hybrid_items=True)
+
+        self.assertEqual(
+            [item["id"] for item in items],
+            [124, 119, 123, 115, 349, 348, 337, 340, 341, 127],
+        )
+        self.assertEqual(
+            requests,
+            [
+                "124,119",
+                "123,125,115",
+                "123",
+                "125",
+                "115",
+                "349,348",
+                "337,340,341",
+                "127",
+            ],
+        )
+
+    def test_async_menu_items_fetch_optional_hybrid_groups_and_split_failures(self):
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+        requests = []
+
+        async def get(path):
+            requested = path.split("menuItems=", 1)[1]
+            requests.append(requested)
+            if requested == "123,125,115":
+                raise ConnectionException(500)
+            if requested == "125":
+                raise ConnectionException(500)
+            return [{"id": int(item_id)} for item_id in requested.split(",")]
+
+        async def exercise():
+            with patch.object(api, "_async_get", new=AsyncMock(side_effect=get)):
+                return await api.async_get_menu_items(
+                    "gw-1", include_hybrid_items=True
+                )
+
+        items = asyncio.run(exercise())
+
+        self.assertEqual(
+            [item["id"] for item in items],
+            [124, 119, 123, 115, 349, 348, 337, 340, 341, 127],
+        )
+        self.assertEqual(
+            requests,
+            [
+                "124,119",
+                "123,125,115",
+                "123",
+                "125",
+                "115",
+                "349,348",
+                "337,340,341",
+                "127",
+            ],
+        )
+
+    def test_async_properties_recovers_from_batch_500_with_small_requests(self):
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+        features = {DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}]}
+        items = [{"id": name, "zn": 0} for name in ("A", "B", "PlantMode")]
+        requests = []
+
+        async def post(path, body):
+            requests.append(body)
+            requested = [item["id"] for item in body["items"]]
+            if len(requested) > 2 or (
+                requested == ["PlantMode"] and not body["useCache"]
+            ):
+                raise ConnectionException(500)
+            return {
+                "features": features,
+                "items": [{"id": name} for name in requested],
+            }
+
+        async def exercise():
+            with patch.object(api, "get_items", return_value=items), patch.object(
+                api, "_async_post", new=AsyncMock(side_effect=post)
+            ):
+                return await api.async_get_properties("gw-1", features, "en", "si")
+
+        result = asyncio.run(exercise())
+        self.assertEqual(
+            [item["id"] for item in result["items"]], ["A", "B", "PlantMode"]
+        )
+        self.assertEqual(result["features"], features)
+        self.assertEqual(
+            [
+                ([item["id"] for item in body["items"]], body["useCache"])
+                for body in requests
+            ],
+            [
+                (["A", "B", "PlantMode"], False),
+                (["A", "B"], False),
+                (["PlantMode"], False),
+                (["PlantMode"], True),
+            ],
+        )
+
+    def test_async_properties_splits_failing_pair_before_using_cache(self):
+        api = AristonAPI("user", "password")
+        features = {DeviceFeatures.ZONES: []}
+        items = [{"id": name, "zn": 0} for name in ("A", "B", "C", "D")]
+        requests = []
+
+        async def post(path, body):
+            requested = [item["id"] for item in body["items"]]
+            requests.append((requested, body["useCache"]))
+            if len(requested) > 2 or requested == ["A", "B"]:
+                raise ConnectionException(500)
+            if requested == ["B"] and not body["useCache"]:
+                raise ConnectionException(500)
+            return {"items": [{"id": name} for name in requested]}
+
+        async def exercise():
+            with patch.object(api, "get_items", return_value=items), patch.object(
+                api, "_async_post", new=AsyncMock(side_effect=post)
+            ):
+                return await api.async_get_properties("gw-1", features, "en", "si")
+
+        result = asyncio.run(exercise())
+        self.assertEqual(
+            [item["id"] for item in result["items"]], ["A", "B", "C", "D"]
+        )
+        self.assertEqual(
+            requests,
+            [
+                (["A", "B", "C", "D"], False),
+                (["A", "B"], False),
+                (["A"], False),
+                (["B"], False),
+                (["B"], True),
+                (["C", "D"], False),
+            ],
+        )
+
+    def test_async_properties_does_not_hide_persistent_or_other_errors(self):
+        api = AristonAPI("user", "password")
+        features = {DeviceFeatures.ZONES: []}
+        items = [{"id": name, "zn": 0} for name in ("A", "B", "C", "D")]
+
+        async def exercise(status):
+            with patch.object(api, "get_items", return_value=items), patch.object(
+                api, "_async_post", new=AsyncMock(side_effect=ConnectionException(status))
+            ) as post:
+                with self.assertRaises(ConnectionException) as error:
+                    await api.async_get_properties("gw-1", features, "en", "si")
+                return error.exception, post.await_args_list
+
+        with self.assertLogs("ariston.ariston_api", level="WARNING") as logs:
+            server_error, server_calls = asyncio.run(exercise(500))
+        self.assertEqual(server_error.args, (500,))
+        self.assertEqual(len(server_calls), 4)
+        self.assertTrue(server_calls[-1].args[1]["useCache"])
+        self.assertIn("property A also failed with cache", logs.output[-1])
+
+        auth_error, auth_calls = asyncio.run(exercise(401))
+        self.assertEqual(auth_error.args, (401,))
+        self.assertEqual(len(auth_calls), 1)
+
     def test_async_write_endpoints_send_values_to_transport(self):
         api = AristonAPI("user", "password", api_url="https://example.test/api/")
         writes = (
@@ -510,28 +686,6 @@ class AristonAPIRequestTests(unittest.TestCase):
             self.assertEqual(error.exception.args, (429, b"rate limited"))
 
         asyncio.run(exercise())
-
-    def test_menu_items_custom_query_and_groups(self):
-        from ariston.const import MenuItemNames
-
-        api = AristonAPI("user", "password", api_url="https://example.test/api/")
-        self.assertEqual(MenuItemNames.base_values(), "124,119")
-        self.assertEqual(MenuItemNames.heat_pump_values(), "337,340,341,348,349")
-        self.assertIn("348", MenuItemNames.values())
-
-        with patch.object(api, "_get", return_value=[{"id": 348}]) as request:
-            self.assertEqual(api.get_menu_items("gw-1", "348,349"), [{"id": 348}])
-        self.assertIn("?menuItems=348,349", request.call_args.args[0])
-
-        async def exercise_async():
-            with patch.object(api, "_async_get", new=AsyncMock(return_value=[{"id": 349}])) as areq:
-                self.assertEqual(
-                    await api.async_get_menu_items("gw-1", "348,349"),
-                    [{"id": 349}],
-                )
-            self.assertIn("?menuItems=348,349", areq.call_args.args[0])
-
-        asyncio.run(exercise_async())
 
 
 if __name__ == "__main__":

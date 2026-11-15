@@ -249,16 +249,48 @@ class AristonAPI:
         return {}
 
     def get_menu_items(
-        self, gw_id: str, menu_items: Optional[str] = None
+        self, gw_id: str, include_hybrid_items: bool = False
     ) -> list[dict[str, Any]]:
-        """Get menu items"""
-        query = menu_items if menu_items is not None else MenuItemNames.base_values()
+        """Get core menu items and, when requested, optional hybrid values."""
         items = self._get(
-            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={query}"
+            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
+            f"?menuItems={MenuItemNames.core_values()}"
         )
-        if items is not None:
-            return items
-        return []
+        if items is None or not include_hybrid_items:
+            return items or []
+
+        for group in MenuItemNames.hybrid_groups():
+            group_ids = ",".join(str(item.value) for item in group)
+            path = (
+                f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
+                f"?menuItems={group_ids}"
+            )
+            try:
+                additional_items = self._get(path)
+            except ConnectionException as error:
+                if error.args[:1] != (500,):
+                    raise
+                additional_items = []
+                for menu_item in group:
+                    item_path = (
+                        f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
+                        f"?menuItems={menu_item.value}"
+                    )
+                    try:
+                        item_response = self._get(item_path)
+                    except ConnectionException as item_error:
+                        if item_error.args[:1] != (500,):
+                            raise
+                        _LOGGER.debug(
+                            "Skipping unsupported GALEVO menu item %s",
+                            menu_item.value,
+                        )
+                        continue
+                    if item_response:
+                        additional_items.extend(item_response)
+            if additional_items:
+                items.extend(additional_items)
+        return items
 
     def set_property(
         self,
@@ -799,18 +831,135 @@ class AristonAPI:
         self, gw_id: str, features: dict[str, Any], culture: str, umsys: str
     ) -> dict[str, Any]:
         """Async get device properties"""
-        properties = await self._async_post(
-            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/get?umsys={umsys}",
+        path = f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/get?umsys={umsys}"
+        items = self.get_items(features)
+        try:
+            properties = await self._async_request_properties(
+                path, items, features, culture, False
+            )
+        except ConnectionException as error:
+            if error.args[:1] != (500,) or not items:
+                raise
+            _LOGGER.warning(
+                "GALEVO properties batch returned HTTP 500; retrying in pairs"
+            )
+            properties = await self._async_recover_properties(
+                path, items, features, culture, error
+            )
+        if properties is not None:
+            return properties
+        return {}
+
+    async def _async_request_properties(
+        self,
+        path: str,
+        items: list[dict[str, Any]],
+        features: dict[str, Any],
+        culture: str,
+        use_cache: bool,
+    ) -> Any:
+        """Request a group of GALEVO properties."""
+        return await self._async_post(
+            path,
             {
-                "useCache": False,
-                "items": self.get_items(features),
+                "useCache": use_cache,
+                "items": items,
                 "features": features,
                 "culture": culture,
             },
         )
-        if properties is not None:
-            return properties
-        return {}
+
+    async def _async_cached_property(
+        self,
+        path: str,
+        item: dict[str, Any],
+        features: dict[str, Any],
+        culture: str,
+    ) -> Any:
+        """Retry a property with the provider cache after HTTP 500."""
+        _LOGGER.warning(
+            "GALEVO property %s returned HTTP 500; trying cached value",
+            item["id"],
+        )
+        try:
+            return await self._async_request_properties(
+                path, [item], features, culture, True
+            )
+        except ConnectionException as error:
+            _LOGGER.warning(
+                "GALEVO property %s also failed with cache (HTTP %s)",
+                item["id"],
+                error.args[0] if error.args else "unknown",
+            )
+            raise
+
+    async def _async_recover_property(
+        self,
+        path: str,
+        item: dict[str, Any],
+        features: dict[str, Any],
+        culture: str,
+    ) -> Any:
+        """Retry one property fresh, then cached on HTTP 500."""
+        try:
+            return await self._async_request_properties(
+                path, [item], features, culture, False
+            )
+        except ConnectionException as error:
+            if error.args[:1] != (500,):
+                raise
+            return await self._async_cached_property(path, item, features, culture)
+
+    async def _async_recover_property_chunk(
+        self,
+        path: str,
+        chunk: list[dict[str, Any]],
+        features: dict[str, Any],
+        culture: str,
+    ) -> list[dict[str, Any]]:
+        """Retry a pair, splitting only when the pair returns HTTP 500."""
+        try:
+            response = await self._async_request_properties(
+                path, chunk, features, culture, False
+            )
+        except ConnectionException as error:
+            if error.args[:1] != (500,):
+                raise
+            if len(chunk) == 1:
+                response = await self._async_cached_property(
+                    path, chunk[0], features, culture
+                )
+                return response.get("items", []) if response else []
+            recovered = []
+            for item in chunk:
+                response = await self._async_recover_property(
+                    path, item, features, culture
+                )
+                if response:
+                    recovered.extend(response.get("items", []))
+            return recovered
+        return response.get("items", []) if response else []
+
+    async def _async_recover_properties(
+        self,
+        path: str,
+        items: list[dict[str, Any]],
+        features: dict[str, Any],
+        culture: str,
+        initial_error: ConnectionException,
+    ) -> dict[str, Any]:
+        """Collect pair retries, preserving the original error if none succeed."""
+        properties = {"features": features, "items": []}
+        for index in range(0, len(items), 2):
+            chunk = items[index : index + 2]
+            properties["items"].extend(
+                await self._async_recover_property_chunk(
+                    path, chunk, features, culture
+                )
+            )
+        if not properties["items"]:
+            raise initial_error
+        return properties
 
     async def async_get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
         """Get BSB plant data."""
@@ -844,16 +993,48 @@ class AristonAPI:
         return {}
 
     async def async_get_menu_items(
-        self, gw_id: str, menu_items: Optional[str] = None
+        self, gw_id: str, include_hybrid_items: bool = False
     ) -> list[dict[str, Any]]:
-        """Async get menu items"""
-        query = menu_items if menu_items is not None else MenuItemNames.base_values()
+        """Async get core menu items and optional hybrid values."""
         items = await self._async_get(
-            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={query}"
+            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
+            f"?menuItems={MenuItemNames.core_values()}"
         )
-        if items is not None:
-            return items
-        return []
+        if items is None or not include_hybrid_items:
+            return items or []
+
+        for group in MenuItemNames.hybrid_groups():
+            group_ids = ",".join(str(item.value) for item in group)
+            path = (
+                f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
+                f"?menuItems={group_ids}"
+            )
+            try:
+                additional_items = await self._async_get(path)
+            except ConnectionException as error:
+                if error.args[:1] != (500,):
+                    raise
+                additional_items = []
+                for menu_item in group:
+                    item_path = (
+                        f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
+                        f"?menuItems={menu_item.value}"
+                    )
+                    try:
+                        item_response = await self._async_get(item_path)
+                    except ConnectionException as item_error:
+                        if item_error.args[:1] != (500,):
+                            raise
+                        _LOGGER.debug(
+                            "Skipping unsupported GALEVO menu item %s",
+                            menu_item.value,
+                        )
+                        continue
+                    if item_response:
+                        additional_items.extend(item_response)
+            if additional_items:
+                items.extend(additional_items)
+        return items
 
     async def async_set_property(
         self,

@@ -3,9 +3,9 @@
 import asyncio
 import unittest
 from datetime import date
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
-from ariston.ariston_api import ConnectionException
+from ariston.ariston_api import AristonAPI, ConnectionException
 from ariston.const import (
     ConsumptionProperties,
     ConsumptionTimeInterval,
@@ -17,6 +17,7 @@ from ariston.const import (
     DeviceProperties,
     GasEnergyUnit,
     GasType,
+    GalevoDeviceAttribute,
     MenuItemNames,
     PlantMode,
     PropertyType,
@@ -28,6 +29,119 @@ from ariston.galevo_device import AristonGalevoDevice
 
 
 class AristonGalevoDeviceTests(unittest.TestCase):
+    def test_hybrid_menu_values_supply_flow_temperature_and_feature_flags(self):
+        device = self.make_device()
+        device.attributes[GalevoDeviceAttribute.HYBRID_SYS] = True
+        for item in device.data["items"]:
+            if item["id"] == DeviceProperties.CH_FLOW_TEMP:
+                item[PropertyType.VALUE] = None
+                item[PropertyType.UNIT] = None
+
+        device.menu_items.extend(
+            [
+                {
+                    "id": MenuItemNames.CH_FLOW_TEMP_SYSTEM.value,
+                    PropertyType.VALUE: 28,
+                    PropertyType.UNIT: "°C",
+                },
+                {
+                    "id": MenuItemNames.HP_WATER_FLOW_TEMP.value,
+                    PropertyType.VALUE: 27,
+                    PropertyType.UNIT: "°C",
+                },
+                {
+                    "id": MenuItemNames.CH_FLOW_TEMP_BOILER.value,
+                    PropertyType.VALUE: 49,
+                    PropertyType.UNIT: "°C",
+                },
+                {
+                    "id": MenuItemNames.GAS_POWER.value,
+                    PropertyType.VALUE: 0,
+                    PropertyType.UNIT: "kW",
+                },
+                {
+                    "id": MenuItemNames.PUMP_MODULATION.value,
+                    PropertyType.VALUE: 0,
+                    PropertyType.UNIT: "%",
+                },
+                {
+                    "id": MenuItemNames.DHW_FLOW_RATE.value,
+                    PropertyType.VALUE: 3276,
+                    PropertyType.UNIT: "l/min",
+                },
+            ]
+        )
+
+        device._update_state()
+
+        self.assertEqual(device.ch_flow_temp_value, 28)
+        self.assertEqual(device.ch_flow_temp_unit, "°C")
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.HP_WATER_FLOW_TEMP.value)]
+        )
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.CH_FLOW_TEMP_BOILER.value)]
+        )
+        self.assertTrue(device.custom_features[str(MenuItemNames.GAS_POWER.value)])
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.PUMP_MODULATION.value)]
+        )
+        self.assertFalse(
+            device.custom_features[str(MenuItemNames.DHW_FLOW_RATE.value)]
+        )
+
+    def test_async_update_requests_hybrid_menu_items_only_for_hybrid_devices(self):
+        device = self.make_device()
+        device.attributes[GalevoDeviceAttribute.HYBRID_SYS] = True
+        device.api.async_get_properties = AsyncMock(return_value=self.make_data())
+        device.api.async_get_menu_items = AsyncMock(return_value=device.menu_items)
+
+        asyncio.run(device.async_update_state())
+
+        device.api.async_get_menu_items.assert_awaited_once_with(
+            "gw-1", include_hybrid_items=True
+        )
+
+    def test_dhw_program_temperatures_are_typed_and_optional(self):
+        device = self.make_device()
+        device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP, "52.5")
+        device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP, 0)
+
+        self.assertEqual(device.dhw_program_comfort_temp_value, 52.5)
+        self.assertEqual(device.dhw_program_economy_temp_value, 0.0)
+        self.assertEqual(device.dhw_program_comfort_temp_unit, "°C")
+        self.assertEqual(device.dhw_program_economy_temp_unit, "°C")
+        device._update_state()
+        self.assertTrue(device.custom_features[DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP])
+        self.assertTrue(device.custom_features[DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP])
+
+        for item in device.data["items"]:
+            if item["id"] == DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP:
+                item[PropertyType.VALUE] = "nan"
+            elif item["id"] == DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP:
+                item[PropertyType.VALUE] = None
+        device._update_state()
+        self.assertIsNone(device.dhw_program_comfort_temp_value)
+        self.assertIsNone(device.dhw_program_economy_temp_value)
+        self.assertFalse(device.custom_features[DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP])
+        self.assertFalse(device.custom_features[DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP])
+
+        device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP, True)
+        self.assertIsNone(device.dhw_program_comfort_temp_value)
+
+        device.data["items"] = [
+            item for item in device.data["items"]
+            if item["id"] != DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP
+        ]
+        self.assertIsNone(device.dhw_program_economy_temp_value)
+        device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP, 45)
+        next(
+            item for item in device.data["items"]
+            if item["id"] == DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP
+        )[PropertyType.UNIT] = "%"
+        device._update_state()
+        self.assertFalse(device.custom_features[DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP])
+
     def make_device(self, metric=True):
         api = Mock()
         device = AristonGalevoDevice(
@@ -317,6 +431,34 @@ class AristonGalevoDeviceTests(unittest.TestCase):
                 self.assertEqual(device.menu_items, previous_menu_items)
                 self.assertEqual(device.signal_strength_value, 4)
 
+    def test_async_update_state_survives_properties_batch_500(self):
+        device = self.make_device()
+        api = AristonAPI("user", "password")
+        device.api = api
+        requested_items = DeviceProperties.list(0)[:3]
+
+        async def post(path, body):
+            if len(body["items"]) > 2:
+                raise ConnectionException(500)
+            return {
+                "items": [
+                    {"id": item["id"], "zn": item["zn"], "value": 1}
+                    for item in body["items"]
+                ]
+            }
+
+        async def refresh():
+            with patch.object(api, "get_items", return_value=requested_items), patch.object(
+                api, "_async_post", new=AsyncMock(side_effect=post)
+            ), patch.object(api, "async_get_menu_items", new=AsyncMock(return_value=[])):
+                await device.async_update_state()
+
+        asyncio.run(refresh())
+        self.assertEqual(
+            [item["id"] for item in device.data["items"]],
+            [item["id"] for item in requested_items],
+        )
+
     def test_menu_http_failure_on_first_refresh_and_recovery(self):
         device = self.make_device()
         device.menu_items = []
@@ -470,10 +612,20 @@ class AristonGalevoDeviceTests(unittest.TestCase):
             DeviceFeatures.HP_SYS: True,
             DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}],
         }
-        base_items = [
-            {"id": MenuItemNames.SIGNAL_STRENGTH.value, PropertyType.VALUE: 80, PropertyType.UNIT: "%"},
-        ]
         hp_items = [
+            {
+                "id": MenuItemNames.SIGNAL_STRENGTH.value,
+                PropertyType.VALUE: 80,
+                PropertyType.UNIT: "%",
+            },
+            {
+                "id": MenuItemNames.CH_RETURN_TEMP.value,
+                PropertyType.VALUE: 3276.0,
+                PropertyType.UNIT: "°C",
+                "isEnum": False,
+                PropertyType.MIN: -3277.0,
+                PropertyType.MAX: 3276.0,
+            },
             {
                 "id": MenuItemNames.CH_BACKUP_RESISTANCE_1.value,
                 PropertyType.VALUE: 0.0,
@@ -485,7 +637,12 @@ class AristonGalevoDeviceTests(unittest.TestCase):
                 "id": MenuItemNames.HP_MODE.value,
                 PropertyType.VALUE: 9.0,
                 "isEnum": True,
-                PropertyType.OPTIONS: {"0": "OFF", "3": "Heating", "9": "Defrost", "17": "Defrost"},
+                PropertyType.OPTIONS: {
+                    "0": "OFF",
+                    "3": "Heating",
+                    "9": "Defrost",
+                    "17": "Defrost",
+                },
             },
             {
                 "id": MenuItemNames.HP_OUTSIDE_AIR_TEMP.value,
@@ -504,12 +661,12 @@ class AristonGalevoDeviceTests(unittest.TestCase):
                 PropertyType.MAX: 3276.0,
             },
             {
-                "id": MenuItemNames.CH_FLOW_TEMP.value,
-                PropertyType.VALUE: 3276.0,
+                "id": MenuItemNames.CH_FLOW_TEMP_SYSTEM.value,
+                PropertyType.VALUE: -3276.8,
                 PropertyType.UNIT: "°C",
                 "isEnum": False,
-                PropertyType.MIN: -3277.0,
-                PropertyType.MAX: 3276.0,
+                PropertyType.MIN: -3276.8,
+                PropertyType.MAX: 3276.7,
             },
         ]
         data_without_ch_flow = self.make_data()
@@ -519,17 +676,27 @@ class AristonGalevoDeviceTests(unittest.TestCase):
             if item["id"] != DeviceProperties.CH_FLOW_TEMP
         ]
         device.api.get_properties.return_value = data_without_ch_flow
-        device.api.get_menu_items.side_effect = [base_items, hp_items]
+        device.api.get_menu_items.return_value = hp_items
 
         device.update_state()
 
-        self.assertFalse(device.custom_features[MenuItemNames.CH_RETURN_TEMP.name])
-        self.assertTrue(device.custom_features[MenuItemNames.SIGNAL_STRENGTH.name])
-        self.assertTrue(device.custom_features[MenuItemNames.CH_BACKUP_RESISTANCE_1.name])
-        self.assertTrue(device.custom_features[MenuItemNames.HP_MODE.name])
-        self.assertTrue(device.custom_features[MenuItemNames.HP_OUTSIDE_AIR_TEMP.name])
-        self.assertTrue(device.custom_features[MenuItemNames.HP_WATER_FLOW_TEMP.name])
-        self.assertFalse(device.custom_features[MenuItemNames.CH_FLOW_TEMP.name])
+        device.api.get_menu_items.assert_called_once_with(
+            "gw-1", include_hybrid_items=True
+        )
+        self.assertFalse(
+            device.custom_features[str(MenuItemNames.CH_RETURN_TEMP.value)]
+        )
+        self.assertIsNone(device.ch_return_temp_value)
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.CH_BACKUP_RESISTANCE_1.value)]
+        )
+        self.assertTrue(device.custom_features[str(MenuItemNames.HP_MODE.value)])
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.HP_OUTSIDE_AIR_TEMP.value)]
+        )
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.HP_WATER_FLOW_TEMP.value)]
+        )
         self.assertFalse(device.custom_features[DeviceProperties.CH_FLOW_TEMP])
 
         self.assertIs(device.ch_backup_resistance_1_value, False)
@@ -542,52 +709,58 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         self.assertIsNone(device.ch_flow_temp_value)
         self.assertEqual(device.ch_flow_temp_unit, "°C")
 
-        # Sync 500 on HP menu items retains cached HP entries without failing update_state
-        device.api.get_menu_items.side_effect = [base_items, ConnectionException(500)]
-        with self.assertLogs("ariston.galevo_device", level="WARNING"):
-            device.update_state()
-        self.assertEqual(device.hp_water_flow_temp_value, 33.0)
-
-        # Sync 401 on HP menu items propagates
-        device.api.get_menu_items.side_effect = [base_items, ConnectionException(401)]
-        with self.assertRaises(ConnectionException):
-            device.update_state()
-
-        # Async path + HTTP 500 retention + 401 propagation + sentinel/missing edge cases
         device.api.async_get_properties = AsyncMock(return_value=data_without_ch_flow)
         updated_hp = [
-            {"id": MenuItemNames.CH_BACKUP_RESISTANCE_1.value, PropertyType.VALUE: 1.0, "isEnum": True},
-            {"id": MenuItemNames.HP_MODE.value, PropertyType.VALUE: 3.0, PropertyType.OPTIONS: None},
-            {"id": MenuItemNames.HP_OUTSIDE_AIR_TEMP.value, PropertyType.VALUE: None},
-            {"id": MenuItemNames.HP_WATER_FLOW_TEMP.value, PropertyType.VALUE: 25.0, "error": True},
-            {"id": MenuItemNames.CH_FLOW_TEMP.value, PropertyType.VALUE: 31.0, PropertyType.UNIT: "°C"},
+            {
+                "id": MenuItemNames.CH_BACKUP_RESISTANCE_1.value,
+                PropertyType.VALUE: 1.0,
+                "isEnum": True,
+            },
+            {
+                "id": MenuItemNames.HP_MODE.value,
+                PropertyType.VALUE: 3.0,
+                PropertyType.OPTIONS: None,
+            },
+            {
+                "id": MenuItemNames.HP_OUTSIDE_AIR_TEMP.value,
+                PropertyType.VALUE: None,
+            },
+            {
+                "id": MenuItemNames.HP_WATER_FLOW_TEMP.value,
+                PropertyType.VALUE: 25.0,
+                "error": True,
+            },
+            {
+                "id": MenuItemNames.CH_FLOW_TEMP_SYSTEM.value,
+                PropertyType.VALUE: 31.0,
+                PropertyType.UNIT: "°C",
+            },
         ]
-        device.api.async_get_menu_items = AsyncMock(side_effect=[base_items, updated_hp])
+        device.api.async_get_menu_items = AsyncMock(return_value=updated_hp)
         asyncio.run(device.async_update_state())
+        device.api.async_get_menu_items.assert_awaited_once_with(
+            "gw-1", include_hybrid_items=True
+        )
         self.assertIs(device.ch_backup_resistance_1_value, True)
         self.assertEqual(device.hp_mode_value, "3.0")
         self.assertEqual(device.hp_mode_options, [])
-        self.assertFalse(device.custom_features[MenuItemNames.HP_OUTSIDE_AIR_TEMP.name])
-        self.assertFalse(device.custom_features[MenuItemNames.HP_WATER_FLOW_TEMP.name])
-        self.assertTrue(device.custom_features[MenuItemNames.CH_FLOW_TEMP.name])
+        self.assertFalse(
+            device.custom_features[str(MenuItemNames.HP_OUTSIDE_AIR_TEMP.value)]
+        )
+        self.assertFalse(
+            device.custom_features[str(MenuItemNames.HP_WATER_FLOW_TEMP.value)]
+        )
         self.assertTrue(device.custom_features[DeviceProperties.CH_FLOW_TEMP])
         self.assertEqual(device.ch_flow_temp_value, 31.0)
         self.assertEqual(device.ch_flow_temp_unit, "°C")
 
-        device.api.async_get_menu_items = AsyncMock(
-            side_effect=[base_items, ConnectionException(550)]
-        )
-        with self.assertLogs("ariston.galevo_device", level="WARNING"):
-            asyncio.run(device.async_update_state())
-        self.assertEqual(device.ch_flow_temp_value, 31.0)
-
-        device.api.async_get_menu_items = AsyncMock(
-            side_effect=[base_items, ConnectionException(401)]
-        )
-        with self.assertRaises(ConnectionException):
-            asyncio.run(device.async_update_state())
-
-        device.menu_items = [{"id": MenuItemNames.HP_MODE.value, PropertyType.VALUE: None}]
+        device.menu_items = [
+            {"id": MenuItemNames.HP_MODE.value, PropertyType.VALUE: "Standby"}
+        ]
+        self.assertEqual(device. get_menu_item_value(MenuItemNames.HP_MODE.value), "Standby")
+        device.menu_items = [
+            {"id": MenuItemNames.HP_MODE.value, PropertyType.VALUE: None}
+        ]
         self.assertIsNone(device.hp_mode_value)
         self.assertIsNone(device.ch_backup_resistance_1_value)
         device.menu_items = []
