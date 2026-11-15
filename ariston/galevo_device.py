@@ -17,7 +17,6 @@ from .const import (
     CustomDeviceFeatures,
     DeviceFeatures,
     DeviceProperties,
-    GalevoDeviceAttribute,
     GasEnergyUnit,
     GasType,
     HOLIDAY_DATE_FORMAT,
@@ -31,7 +30,7 @@ from .const import (
 from .device import AristonDevice
 
 _LOGGER = logging.getLogger(__name__)
-_MENU_ITEM_UNAVAILABLE_VALUE = 3276
+_MENU_ITEM_UNAVAILABLE_VALUES = frozenset({3276.0, 3276.7, -3276.8, -3277.0})
 
 
 class AristonGalevoDevice(AristonDevice):
@@ -117,8 +116,7 @@ class AristonGalevoDevice(AristonDevice):
     def _should_include_hybrid_menu_items(self) -> bool:
         """Return True if the device is a hybrid or heat pump system."""
         return bool(
-            self.attributes.get(GalevoDeviceAttribute.HYBRID_SYS) is True
-            or self.features.get(DeviceFeatures.HYBRID_SYS) is True
+            self.features.get(DeviceFeatures.HYBRID_SYS) is True
             or self.features.get(DeviceFeatures.HP_SYS) is True
         )
 
@@ -614,7 +612,11 @@ class AristonGalevoDevice(AristonDevice):
             )
             or {}
         )
-        return options.get(str(int(value)), str(value))
+        try:
+            option_key = str(int(value))
+        except (TypeError, ValueError):
+            option_key = str(value)
+        return options.get(option_key, str(value))
 
     @property
     def hp_mode_options(self) -> list[str]:
@@ -648,15 +650,7 @@ class AristonGalevoDevice(AristonDevice):
 
     def get_menu_item_value(self, menu_item_id: int) -> Any:
         """Return a value, treating the gateway's unavailable marker as empty."""
-        value = self._get_menu_item_by_id(menu_item_id, PropertyType.VALUE)
-        if value is None:
-            return None
-        try:
-            if float(value) == _MENU_ITEM_UNAVAILABLE_VALUE:
-                return None
-        except (TypeError, ValueError):
-            pass
-        return value
+        return self._get_menu_item_by_id(menu_item_id, PropertyType.VALUE)
 
     def get_menu_item_unit(self, menu_item_id: int) -> Any:
         """Return a menu item's reported unit."""
@@ -821,14 +815,11 @@ class AristonGalevoDevice(AristonDevice):
         value = item.get(PropertyType.VALUE)
         if value is None:
             return False
-        is_enum = bool(item.get("isEnum") or item.get(PropertyType.OPTIONS))
-        if not is_enum and PropertyType.MAX in item:
-            max_val = item[PropertyType.MAX]
-            min_val = item.get(PropertyType.MIN)
-            if value == max_val or (
-                min_val is not None and min_val < 0 and value == min_val
-            ):
+        try:
+            if float(value) in _MENU_ITEM_UNAVAILABLE_VALUES:
                 return False
+        except (TypeError, ValueError):
+            pass
         return True
 
     def _get_menu_item_by_id(self, menu_item_id: int, item_value: str) -> Any:

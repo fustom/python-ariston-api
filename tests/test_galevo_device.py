@@ -92,13 +92,41 @@ class AristonGalevoDeviceTests(unittest.TestCase):
 
     def test_async_update_requests_hybrid_menu_items_only_for_hybrid_devices(self):
         device = self.make_device()
-        device.attributes[GalevoDeviceAttribute.HYBRID_SYS] = True
+        device.attributes["hybrSys"] = True
+        device.features = {}
+        device.api.async_get_features_for_device = AsyncMock(
+            return_value={DeviceFeatures.HYBRID_SYS: True}
+        )
         device.api.async_get_properties = AsyncMock(return_value=self.make_data())
         device.api.async_get_menu_items = AsyncMock(return_value=device.menu_items)
 
         asyncio.run(device.async_update_state())
 
         device.api.async_get_menu_items.assert_awaited_once_with(
+            "gw-1", include_hybrid_items=True
+        )
+
+        device.features[DeviceFeatures.HYBRID_SYS] = False
+        device.attributes[GalevoDeviceAttribute.HYBRID_SYS] = True
+        device.api.async_get_menu_items.reset_mock()
+        asyncio.run(device.async_update_state())
+        device.api.async_get_menu_items.assert_awaited_once_with(
+            "gw-1", include_hybrid_items=False
+        )
+
+    def test_sync_update_requests_hybrid_menu_items_from_features(self):
+        device = self.make_device()
+        device.attributes["hybrSys"] = True
+        device.features = {}
+        device.api.get_features_for_device.return_value = {
+            DeviceFeatures.HYBRID_SYS: True
+        }
+        device.api.get_properties.return_value = self.make_data()
+        device.api.get_menu_items.return_value = device.menu_items
+
+        device.update_state()
+
+        device.api.get_menu_items.assert_called_once_with(
             "gw-1", include_hybrid_items=True
         )
 
@@ -431,32 +459,84 @@ class AristonGalevoDeviceTests(unittest.TestCase):
                 self.assertEqual(device.menu_items, previous_menu_items)
                 self.assertEqual(device.signal_strength_value, 4)
 
-    def test_async_update_state_survives_properties_batch_500(self):
-        device = self.make_device()
-        api = AristonAPI("user", "password")
-        device.api = api
-        requested_items = DeviceProperties.list(0)[:3]
-
-        async def post(path, body):
-            if len(body["items"]) > 2:
-                raise ConnectionException(500)
-            return {
-                "items": [
-                    {"id": item["id"], "zn": item["zn"], "value": 1}
-                    for item in body["items"]
-                ]
-            }
-
+    def _assert_async_refresh_data(self, device, api, requested_items, transport_patch):
         async def refresh():
-            with patch.object(api, "get_items", return_value=requested_items), patch.object(
-                api, "_async_post", new=AsyncMock(side_effect=post)
-            ), patch.object(api, "async_get_menu_items", new=AsyncMock(return_value=[])):
+            with (
+                patch.object(api, "get_items", return_value=requested_items),
+                transport_patch,
+                patch.object(api, "async_get_menu_items", new=AsyncMock(return_value=[])),
+            ):
                 await device.async_update_state()
 
         asyncio.run(refresh())
         self.assertEqual(
             [item["id"] for item in device.data["items"]],
             [item["id"] for item in requested_items],
+        )
+
+    def test_async_update_state_recovers_from_property_batch_failures(self):
+        for failure in (ConnectionException(500), asyncio.TimeoutError()):
+            with self.subTest(failure=type(failure).__name__):
+                device = self.make_device()
+                api = AristonAPI("user", "password")
+                device.api = api
+                requested_items = DeviceProperties.list(0)[:3]
+
+                async def post(path, body, **kwargs):
+                    if len(body["items"]) > 2:
+                        raise failure
+                    return {
+                        "items": [
+                            {"id": item["id"], "zn": item["zn"], "value": 1}
+                            for item in body["items"]
+                        ]
+                    }
+
+                self._assert_async_refresh_data(
+                    device,
+                    api,
+                    requested_items,
+                    patch.object(api, "_async_post", new=AsyncMock(side_effect=post)),
+                )
+
+    def test_async_update_state_accepts_slow_properties_response(self):
+        device = self.make_device()
+        api = AristonAPI("user", "password")
+        device.api = api
+        requested_items = DeviceProperties.list(0)[:3]
+
+        class SlowResponse:
+            ok = True
+            content_length = 1
+
+            async def json(self):
+                return {
+                    "items": [
+                        {"id": item["id"], "zn": item["zn"], "value": 1}
+                        for item in requested_items
+                    ]
+                }
+
+        class SlowSession:
+            def __init__(self, timeout):
+                self.timeout = timeout
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc_value, traceback):
+                pass
+
+            async def request(self, *args, **kwargs):
+                if self.timeout.total < 37.8:
+                    raise asyncio.TimeoutError
+                return SlowResponse()
+
+        self._assert_async_refresh_data(
+            device,
+            api,
+            requested_items,
+            patch("ariston.ariston_api.aiohttp.ClientSession", SlowSession),
         )
 
     def test_menu_http_failure_on_first_refresh_and_recovery(self):
@@ -755,9 +835,39 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         self.assertEqual(device.ch_flow_temp_unit, "°C")
 
         device.menu_items = [
-            {"id": MenuItemNames.HP_MODE.value, PropertyType.VALUE: "Standby"}
+            {
+                "id": MenuItemNames.PUMP_MODULATION.value,
+                PropertyType.VALUE: 100.0,
+                PropertyType.UNIT: "%",
+                "isEnum": False,
+                PropertyType.MIN: 0.0,
+                PropertyType.MAX: 100.0,
+            },
+            {
+                "id": MenuItemNames.HP_OUTSIDE_AIR_TEMP.value,
+                PropertyType.VALUE: -20.0,
+                PropertyType.UNIT: "°C",
+                "isEnum": False,
+                PropertyType.MIN: -20.0,
+                PropertyType.MAX: 50.0,
+            },
+            {"id": MenuItemNames.HP_MODE.value, PropertyType.VALUE: "Standby"},
         ]
-        self.assertEqual(device. get_menu_item_value(MenuItemNames.HP_MODE.value), "Standby")
+        device._update_state()
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.PUMP_MODULATION.value)]
+        )
+        self.assertEqual(
+            device.get_menu_item_value(MenuItemNames.PUMP_MODULATION.value), 100.0
+        )
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.HP_OUTSIDE_AIR_TEMP.value)]
+        )
+        self.assertEqual(device.hp_outside_air_temp_value, -20.0)
+        self.assertEqual(
+            device.get_menu_item_value(MenuItemNames.HP_MODE.value), "Standby"
+        )
+        self.assertEqual(device.hp_mode_value, "Standby")
         device.menu_items = [
             {"id": MenuItemNames.HP_MODE.value, PropertyType.VALUE: None}
         ]
