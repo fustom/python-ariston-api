@@ -3,9 +3,9 @@
 import asyncio
 import unittest
 from datetime import date
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
-from ariston.ariston_api import ConnectionException
+from ariston.ariston_api import AristonAPI, ConnectionException
 from ariston.const import (
     ConsumptionProperties,
     ConsumptionTimeInterval,
@@ -316,6 +316,34 @@ class AristonGalevoDeviceTests(unittest.TestCase):
                 self.assertEqual(device.data, fresh_data)
                 self.assertEqual(device.menu_items, previous_menu_items)
                 self.assertEqual(device.signal_strength_value, 4)
+
+    def test_async_update_state_survives_properties_batch_500(self):
+        device = self.make_device()
+        api = AristonAPI("user", "password")
+        device.api = api
+        requested_items = DeviceProperties.list(0)[:3]
+
+        async def post(path, body):
+            if len(body["items"]) > 2:
+                raise ConnectionException(500)
+            return {
+                "items": [
+                    {"id": item["id"], "zn": item["zn"], "value": 1}
+                    for item in body["items"]
+                ]
+            }
+
+        async def refresh():
+            with patch.object(api, "get_items", return_value=requested_items), patch.object(
+                api, "_async_post", new=AsyncMock(side_effect=post)
+            ), patch.object(api, "async_get_menu_items", new=AsyncMock(return_value=[])):
+                await device.async_update_state()
+
+        asyncio.run(refresh())
+        self.assertEqual(
+            [item["id"] for item in device.data["items"]],
+            [item["id"] for item in requested_items],
+        )
 
     def test_menu_http_failure_on_first_refresh_and_recovery(self):
         device = self.make_device()

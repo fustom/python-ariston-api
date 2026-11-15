@@ -796,15 +796,69 @@ class AristonAPI:
         self, gw_id: str, features: dict[str, Any], culture: str, umsys: str
     ) -> dict[str, Any]:
         """Async get device properties"""
-        properties = await self._async_post(
-            f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/get?umsys={umsys}",
-            {
-                "useCache": False,
-                "items": self.get_items(features),
-                "features": features,
-                "culture": culture,
-            },
-        )
+        path = f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/get?umsys={umsys}"
+        items = self.get_items(features)
+
+        async def request(chunk: list[dict[str, Any]], use_cache: bool) -> Any:
+            return await self._async_post(
+                path,
+                {
+                    "useCache": use_cache,
+                    "items": chunk,
+                    "features": features,
+                    "culture": culture,
+                },
+            )
+
+        async def cached_item(item: dict[str, Any]) -> Any:
+            _LOGGER.warning(
+                "GALEVO property %s returned HTTP 500; trying cached value",
+                item["id"],
+            )
+            try:
+                return await request([item], True)
+            except ConnectionException as error:
+                _LOGGER.warning(
+                    "GALEVO property %s also failed with cache (HTTP %s)",
+                    item["id"],
+                    error.args[0] if error.args else "unknown",
+                )
+                raise
+
+        try:
+            properties = await request(items, False)
+        except ConnectionException as error:
+            if error.args[:1] != (500,) or not items:
+                raise
+            _LOGGER.warning(
+                "GALEVO properties batch returned HTTP 500; retrying in pairs"
+            )
+            properties = {"features": features, "items": []}
+            for index in range(0, len(items), 2):
+                chunk = items[index : index + 2]
+                try:
+                    response = await request(chunk, False)
+                    if response:
+                        properties["items"].extend(response.get("items", []))
+                except ConnectionException as chunk_error:
+                    if chunk_error.args[:1] != (500,):
+                        raise
+                    if len(chunk) == 1:
+                        response = await cached_item(chunk[0])
+                        if response:
+                            properties["items"].extend(response.get("items", []))
+                        continue
+                    for item in chunk:
+                        try:
+                            response = await request([item], False)
+                        except ConnectionException as item_error:
+                            if item_error.args[:1] != (500,):
+                                raise
+                            response = await cached_item(item)
+                        if response:
+                            properties["items"].extend(response.get("items", []))
+            if not properties["items"]:
+                raise error
         if properties is not None:
             return properties
         return {}
