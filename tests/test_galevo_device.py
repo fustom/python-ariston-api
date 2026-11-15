@@ -17,6 +17,7 @@ from ariston.const import (
     DeviceProperties,
     GasEnergyUnit,
     GasType,
+    GalevoDeviceAttribute,
     MenuItemNames,
     PlantMode,
     PropertyType,
@@ -28,6 +29,79 @@ from ariston.galevo_device import AristonGalevoDevice
 
 
 class AristonGalevoDeviceTests(unittest.TestCase):
+    def test_hybrid_menu_values_supply_flow_temperature_and_feature_flags(self):
+        device = self.make_device()
+        device.attributes[GalevoDeviceAttribute.HYBRID_SYS] = True
+        for item in device.data["items"]:
+            if item["id"] == DeviceProperties.CH_FLOW_TEMP:
+                item[PropertyType.VALUE] = None
+                item[PropertyType.UNIT] = None
+
+        device.menu_items.extend(
+            [
+                {
+                    "id": MenuItemNames.CH_FLOW_TEMP_SYSTEM.value,
+                    PropertyType.VALUE: 28,
+                    PropertyType.UNIT: "°C",
+                },
+                {
+                    "id": MenuItemNames.HP_WATER_FLOW_TEMP.value,
+                    PropertyType.VALUE: 27,
+                    PropertyType.UNIT: "°C",
+                },
+                {
+                    "id": MenuItemNames.CH_FLOW_TEMP_BOILER.value,
+                    PropertyType.VALUE: 49,
+                    PropertyType.UNIT: "°C",
+                },
+                {
+                    "id": MenuItemNames.GAS_POWER.value,
+                    PropertyType.VALUE: 0,
+                    PropertyType.UNIT: "kW",
+                },
+                {
+                    "id": MenuItemNames.PUMP_MODULATION.value,
+                    PropertyType.VALUE: 0,
+                    PropertyType.UNIT: "%",
+                },
+                {
+                    "id": MenuItemNames.DHW_FLOW_RATE.value,
+                    PropertyType.VALUE: 3276,
+                    PropertyType.UNIT: "l/min",
+                },
+            ]
+        )
+
+        device._update_state()
+
+        self.assertEqual(device.ch_flow_temp_value, 28)
+        self.assertEqual(device.ch_flow_temp_unit, "°C")
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.HP_WATER_FLOW_TEMP.value)]
+        )
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.CH_FLOW_TEMP_BOILER.value)]
+        )
+        self.assertTrue(device.custom_features[str(MenuItemNames.GAS_POWER.value)])
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.PUMP_MODULATION.value)]
+        )
+        self.assertFalse(
+            device.custom_features[str(MenuItemNames.DHW_FLOW_RATE.value)]
+        )
+
+    def test_async_update_requests_hybrid_menu_items_only_for_hybrid_devices(self):
+        device = self.make_device()
+        device.attributes[GalevoDeviceAttribute.HYBRID_SYS] = True
+        device.api.async_get_properties = AsyncMock(return_value=self.make_data())
+        device.api.async_get_menu_items = AsyncMock(return_value=device.menu_items)
+
+        asyncio.run(device.async_update_state())
+
+        device.api.async_get_menu_items.assert_awaited_once_with(
+            "gw-1", include_hybrid_items=True
+        )
+
     def test_dhw_program_temperatures_are_typed_and_optional(self):
         device = self.make_device()
         device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP, "52.5")

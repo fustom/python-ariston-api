@@ -248,14 +248,49 @@ class AristonAPI:
             return settings
         return {}
 
-    def get_menu_items(self, gw_id: str) -> list[dict[str, Any]]:
-        """Get menu items"""
+    def get_menu_items(
+        self, gw_id: str, include_hybrid_items: bool = False
+    ) -> list[dict[str, Any]]:
+        """Get core menu items and, when requested, optional hybrid values."""
         items = self._get(
-            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={MenuItemNames.values()}"
+            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
+            f"?menuItems={MenuItemNames.core_values()}"
         )
-        if items is not None:
-            return items
-        return []
+        if items is None or not include_hybrid_items:
+            return items or []
+
+        for group in MenuItemNames.hybrid_groups():
+            group_ids = ",".join(str(item.value) for item in group)
+            path = (
+                f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
+                f"?menuItems={group_ids}"
+            )
+            try:
+                additional_items = self._get(path)
+            except ConnectionException as error:
+                if error.args[:1] != (500,):
+                    raise
+                additional_items = []
+                for menu_item in group:
+                    item_path = (
+                        f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
+                        f"?menuItems={menu_item.value}"
+                    )
+                    try:
+                        item_response = self._get(item_path)
+                    except ConnectionException as item_error:
+                        if item_error.args[:1] != (500,):
+                            raise
+                        _LOGGER.debug(
+                            "Skipping unsupported GALEVO menu item %s",
+                            menu_item.value,
+                        )
+                        continue
+                    if item_response:
+                        additional_items.extend(item_response)
+            if additional_items:
+                items.extend(additional_items)
+        return items
 
     def set_property(
         self,
@@ -957,14 +992,49 @@ class AristonAPI:
             return med_plant_settings
         return {}
 
-    async def async_get_menu_items(self, gw_id: str) -> list[dict[str, Any]]:
-        """Async get menu items"""
+    async def async_get_menu_items(
+        self, gw_id: str, include_hybrid_items: bool = False
+    ) -> list[dict[str, Any]]:
+        """Async get core menu items and optional hybrid values."""
         items = await self._async_get(
-            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={MenuItemNames.values()}"
+            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
+            f"?menuItems={MenuItemNames.core_values()}"
         )
-        if items is not None:
-            return items
-        return []
+        if items is None or not include_hybrid_items:
+            return items or []
+
+        for group in MenuItemNames.hybrid_groups():
+            group_ids = ",".join(str(item.value) for item in group)
+            path = (
+                f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
+                f"?menuItems={group_ids}"
+            )
+            try:
+                additional_items = await self._async_get(path)
+            except ConnectionException as error:
+                if error.args[:1] != (500,):
+                    raise
+                additional_items = []
+                for menu_item in group:
+                    item_path = (
+                        f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
+                        f"?menuItems={menu_item.value}"
+                    )
+                    try:
+                        item_response = await self._async_get(item_path)
+                    except ConnectionException as item_error:
+                        if item_error.args[:1] != (500,):
+                            raise
+                        _LOGGER.debug(
+                            "Skipping unsupported GALEVO menu item %s",
+                            menu_item.value,
+                        )
+                        continue
+                    if item_response:
+                        additional_items.extend(item_response)
+            if additional_items:
+                items.extend(additional_items)
+        return items
 
     async def async_set_property(
         self,
