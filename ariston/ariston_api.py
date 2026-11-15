@@ -837,11 +837,14 @@ class AristonAPI:
             properties = await self._async_request_properties(
                 path, items, features, culture, False
             )
-        except ConnectionException as error:
-            if error.args[:1] != (500,) or not items:
+        except (ConnectionException, asyncio.TimeoutError) as error:
+            if (
+                isinstance(error, ConnectionException)
+                and error.args[:1] != (500,)
+            ) or not items:
                 raise
             _LOGGER.warning(
-                "GALEVO properties batch returned HTTP 500; retrying in pairs"
+                "GALEVO properties batch failed with HTTP 500 or timed out; retrying in pairs"
             )
             properties = await self._async_recover_properties(
                 path, items, features, culture, error
@@ -867,6 +870,7 @@ class AristonAPI:
                 "features": features,
                 "culture": culture,
             },
+            timeout_seconds=90,
         )
 
     async def _async_cached_property(
@@ -876,9 +880,9 @@ class AristonAPI:
         features: dict[str, Any],
         culture: str,
     ) -> Any:
-        """Retry a property with the provider cache after HTTP 500."""
+        """Retry a property with the provider cache after a server error or timeout."""
         _LOGGER.warning(
-            "GALEVO property %s returned HTTP 500; trying cached value",
+            "GALEVO property %s failed or timed out; trying cached value",
             item["id"],
         )
         try:
@@ -900,13 +904,13 @@ class AristonAPI:
         features: dict[str, Any],
         culture: str,
     ) -> Any:
-        """Retry one property fresh, then cached on HTTP 500."""
+        """Retry one property fresh, then cached on server error or timeout."""
         try:
             return await self._async_request_properties(
                 path, [item], features, culture, False
             )
-        except ConnectionException as error:
-            if error.args[:1] != (500,):
+        except (ConnectionException, asyncio.TimeoutError) as error:
+            if isinstance(error, ConnectionException) and error.args[:1] != (500,):
                 raise
             return await self._async_cached_property(path, item, features, culture)
 
@@ -917,13 +921,13 @@ class AristonAPI:
         features: dict[str, Any],
         culture: str,
     ) -> list[dict[str, Any]]:
-        """Retry a pair, splitting only when the pair returns HTTP 500."""
+        """Retry a pair, splitting on server error or timeout."""
         try:
             response = await self._async_request_properties(
                 path, chunk, features, culture, False
             )
-        except ConnectionException as error:
-            if error.args[:1] != (500,):
+        except (ConnectionException, asyncio.TimeoutError) as error:
+            if isinstance(error, ConnectionException) and error.args[:1] != (500,):
                 raise
             if len(chunk) == 1:
                 response = await self._async_cached_property(
@@ -946,7 +950,7 @@ class AristonAPI:
         items: list[dict[str, Any]],
         features: dict[str, Any],
         culture: str,
-        initial_error: ConnectionException,
+        initial_error: ConnectionException | asyncio.TimeoutError,
     ) -> dict[str, Any]:
         """Collect pair retries, preserving the original error if none succeed."""
         properties = {"features": features, "items": []}
@@ -1456,6 +1460,7 @@ class AristonAPI:
         params: Optional[dict[str, Any]] = None,
         body: Any = None,
         is_retry: bool = False,
+        timeout_seconds: int = 30,
     ) -> Optional[dict[str, Any]]:
         """Async request with aiohttp"""
         if not is_retry and time.time() < self._blocked_until:
@@ -1475,10 +1480,8 @@ class AristonAPI:
             params,
         )
 
-        # Apply an explicit total timeout so a stalled request fails fast
-        # instead of relying on aiohttp's 5 minute default. This mirrors the
-        # 30 second timeout used by the synchronous `requests` path.
-        timeout = aiohttp.ClientTimeout(total=30)
+        # GALEVO property batches can take longer than other API requests.
+        timeout = aiohttp.ClientTimeout(total=timeout_seconds)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             response = await session.request(
                 method, path, params=params, json=body, headers=headers
@@ -1490,7 +1493,7 @@ class AristonAPI:
                         if not is_retry:
                             if await self.async_connect():
                                 return await self.__async_request(
-                                    method, path, params, body, True
+                                    method, path, params, body, True, timeout_seconds
                                 )
                             raise ConnectionException(
                                 "Login failed (password changed?)"
@@ -1500,13 +1503,13 @@ class AristonAPI:
                         return None
                     case 429:
                         return await self.__async_handle_rate_limit(
-                            response, is_retry, method, path, params, body
+                            response, is_retry, method, path, params, body, timeout_seconds
                         )
                     case _:
                         if not is_retry:
                             await asyncio.sleep(5)
                             return await self.__async_request(
-                                method, path, params, body, True
+                                method, path, params, body, True, timeout_seconds
                             )
                         raise ConnectionException(response.status)
 
@@ -1517,9 +1520,13 @@ class AristonAPI:
 
             return None
 
-    async def _async_post(self, path: str, body: Any) -> Any:
+    async def _async_post(
+        self, path: str, body: Any, timeout_seconds: int = 30
+    ) -> Any:
         """Async POST request"""
-        return await self.__async_request("POST", path, None, body)
+        return await self.__async_request(
+            "POST", path, None, body, timeout_seconds=timeout_seconds
+        )
 
     async def __async_handle_rate_limit(
         self,
@@ -1529,6 +1536,7 @@ class AristonAPI:
         path: str,
         params: Optional[dict[str, Any]],
         body: Any,
+        timeout_seconds: int,
     ) -> Optional[dict[str, Any]]:
         """Sleep out the 429 block window, retry once, share the deadline."""
         content = await response.content.read()
@@ -1536,7 +1544,9 @@ class AristonAPI:
         self._blocked_until = time.time() + wait_seconds
         if not is_retry:
             await asyncio.sleep(wait_seconds)
-            return await self.__async_request(method, path, params, body, True)
+            return await self.__async_request(
+                method, path, params, body, True, timeout_seconds
+            )
         raise ConnectionException(response.status, content)
 
     async def _async_get(

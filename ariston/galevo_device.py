@@ -17,7 +17,6 @@ from .const import (
     CustomDeviceFeatures,
     DeviceFeatures,
     DeviceProperties,
-    GalevoDeviceAttribute,
     GasEnergyUnit,
     GasType,
     HOLIDAY_DATE_FORMAT,
@@ -125,7 +124,7 @@ class AristonGalevoDevice(AristonDevice):
             self.menu_items = self.api.get_menu_items(
                 self.gw,
                 include_hybrid_items=(
-                    self.attributes.get(GalevoDeviceAttribute.HYBRID_SYS) is True
+                    self.features.get(DeviceFeatures.HYBRID_SYS) is True
                 ),
             )
         except ConnectionException as error:
@@ -147,7 +146,7 @@ class AristonGalevoDevice(AristonDevice):
             ),
             self._async_get_menu_items(
                 include_hybrid_items=(
-                    self.attributes.get(GalevoDeviceAttribute.HYBRID_SYS) is True
+                    self.features.get(DeviceFeatures.HYBRID_SYS) is True
                 )
             ),
         )
