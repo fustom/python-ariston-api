@@ -17,6 +17,7 @@ from .const import (
     CustomDeviceFeatures,
     DeviceFeatures,
     DeviceProperties,
+    GalevoDeviceAttribute,
     GasEnergyUnit,
     GasType,
     HOLIDAY_DATE_FORMAT,
@@ -30,6 +31,7 @@ from .const import (
 from .device import AristonDevice
 
 _LOGGER = logging.getLogger(__name__)
+_MENU_ITEM_UNAVAILABLE_VALUE = 3276
 
 
 class AristonGalevoDevice(AristonDevice):
@@ -86,6 +88,16 @@ class AristonGalevoDevice(AristonDevice):
         self.custom_features[DeviceProperties.CH_FLOW_TEMP] = (
             self.ch_flow_temp_value is not None
         )
+        for menu_item in (
+            MenuItemNames.CH_FLOW_TEMP_BOILER,
+            MenuItemNames.GAS_POWER,
+            MenuItemNames.DHW_FLOW_RATE,
+            MenuItemNames.PUMP_MODULATION,
+            MenuItemNames.HP_WATER_FLOW_TEMP,
+        ):
+            self.custom_features[str(menu_item.value)] = (
+                self.get_menu_item_value(menu_item.value) is not None
+            )
         for item_id in (
             DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP,
             DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP,
@@ -110,7 +122,12 @@ class AristonGalevoDevice(AristonDevice):
             self.umsys,
         )
         try:
-            self.menu_items = self.api.get_menu_items(self.gw)
+            self.menu_items = self.api.get_menu_items(
+                self.gw,
+                include_hybrid_items=(
+                    self.attributes.get(GalevoDeviceAttribute.HYBRID_SYS) is True
+                ),
+            )
         except ConnectionException as error:
             if not self._should_retain_menu_items_after_error(error):
                 raise
@@ -128,14 +145,22 @@ class AristonGalevoDevice(AristonDevice):
                 self.language_tag,
                 self.umsys,
             ),
-            self._async_get_menu_items(),
+            self._async_get_menu_items(
+                include_hybrid_items=(
+                    self.attributes.get(GalevoDeviceAttribute.HYBRID_SYS) is True
+                )
+            ),
         )
         self._update_state()
 
-    async def _async_get_menu_items(self) -> list[dict[str, Any]]:
+    async def _async_get_menu_items(
+        self, include_hybrid_items: bool = False
+    ) -> list[dict[str, Any]]:
         """Get menu items while retaining the last values for server errors."""
         try:
-            return await self.api.async_get_menu_items(self.gw)
+            return await self.api.async_get_menu_items(
+                self.gw, include_hybrid_items=include_hybrid_items
+            )
         except ConnectionException as error:
             if not self._should_retain_menu_items_after_error(error):
                 raise
@@ -440,7 +465,12 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def ch_flow_temp_value(self) -> Optional[str]:
         """Get central heating flow temperature value"""
-        return self._get_item_by_id(DeviceProperties.CH_FLOW_TEMP, PropertyType.VALUE)
+        value = self._get_item_by_id(
+            DeviceProperties.CH_FLOW_TEMP, PropertyType.VALUE
+        )
+        if value is not None:
+            return value
+        return self.get_menu_item_value(MenuItemNames.CH_FLOW_TEMP_SYSTEM.value)
 
     @property
     def outside_temp_value(self) -> str:
@@ -462,7 +492,14 @@ class AristonGalevoDevice(AristonDevice):
     @property
     def ch_flow_temp_unit(self) -> str:
         """Get central heating flow temperature unit"""
-        return self._get_item_by_id(DeviceProperties.CH_FLOW_TEMP, PropertyType.UNIT)
+        unit = self._get_item_by_id(
+            DeviceProperties.CH_FLOW_TEMP, PropertyType.UNIT
+        )
+        if unit is not None:
+            return unit
+        return self._get_menu_item_by_id(
+            MenuItemNames.CH_FLOW_TEMP_SYSTEM.value, PropertyType.UNIT
+        )
 
     @property
     def is_flame_on_value(self) -> bool:
@@ -558,6 +595,22 @@ class AristonGalevoDevice(AristonDevice):
         return self._get_menu_item_by_id(
             MenuItemNames.CH_RETURN_TEMP.value, PropertyType.UNIT
         )
+
+    def get_menu_item_value(self, menu_item_id: int) -> Any:
+        """Return a value, treating the gateway's unavailable marker as empty."""
+        value = self._get_menu_item_by_id(menu_item_id, PropertyType.VALUE)
+        if value is None:
+            return None
+        try:
+            if float(value) == _MENU_ITEM_UNAVAILABLE_VALUE:
+                return None
+        except (TypeError, ValueError):
+            pass
+        return value
+
+    def get_menu_item_unit(self, menu_item_id: int) -> Any:
+        """Return a menu item's reported unit."""
+        return self._get_menu_item_by_id(menu_item_id, PropertyType.UNIT)
 
     def get_measured_temp_unit(self, zone: int) -> str:
         """Get zone measured temp unit"""

@@ -670,8 +670,30 @@ class MenuItemNames(IntEnum):
 
     CH_RETURN_TEMP = 124
     SIGNAL_STRENGTH = 119
+    CH_FLOW_TEMP_BOILER = 123
+    GAS_POWER = 125
+    DHW_FLOW_RATE = 127
+    PUMP_MODULATION = 115
+    HP_WATER_FLOW_TEMP = 348
+    CH_FLOW_TEMP_SYSTEM = 349
 
     @classmethod
     def values(cls) -> str:
         """Return all menu items values"""
         return ",".join(str(c.value) for c in cls)
+
+    @classmethod
+    def core_values(cls) -> str:
+        """Return the established menu items that work on all GALEVO devices."""
+        return ",".join(
+            str(item.value) for item in (cls.CH_RETURN_TEMP, cls.SIGNAL_STRENGTH)
+        )
+
+    @classmethod
+    def hybrid_groups(cls) -> tuple[tuple["MenuItemNames", ...], ...]:
+        """Return small groups of optional menu items for hybrid systems."""
+        return (
+            (cls.CH_FLOW_TEMP_BOILER, cls.GAS_POWER, cls.PUMP_MODULATION),
+            (cls.CH_FLOW_TEMP_SYSTEM, cls.HP_WATER_FLOW_TEMP),
+            (cls.DHW_FLOW_RATE,),
+        )

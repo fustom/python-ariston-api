@@ -386,6 +386,59 @@ class AristonAPIRequestTests(unittest.TestCase):
 
         asyncio.run(run_all())
 
+    def test_sync_menu_items_fetch_optional_hybrid_groups_and_split_failures(self):
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+        requests = []
+
+        def get(path):
+            requested = path.split("menuItems=", 1)[1]
+            requests.append(requested)
+            if requested == "123,125,115":
+                raise ConnectionException(500)
+            if requested == "125":
+                raise ConnectionException(500)
+            return [{"id": int(item_id)} for item_id in requested.split(",")]
+
+        with patch.object(api, "_get", side_effect=get):
+            items = api.get_menu_items("gw-1", include_hybrid_items=True)
+
+        self.assertEqual(
+            [item["id"] for item in items], [124, 119, 123, 115, 349, 348, 127]
+        )
+        self.assertEqual(
+            requests,
+            ["124,119", "123,125,115", "123", "125", "115", "349,348", "127"],
+        )
+
+    def test_async_menu_items_fetch_optional_hybrid_groups_and_split_failures(self):
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+        requests = []
+
+        async def get(path):
+            requested = path.split("menuItems=", 1)[1]
+            requests.append(requested)
+            if requested == "123,125,115":
+                raise ConnectionException(500)
+            if requested == "125":
+                raise ConnectionException(500)
+            return [{"id": int(item_id)} for item_id in requested.split(",")]
+
+        async def exercise():
+            with patch.object(api, "_async_get", new=AsyncMock(side_effect=get)):
+                return await api.async_get_menu_items(
+                    "gw-1", include_hybrid_items=True
+                )
+
+        items = asyncio.run(exercise())
+
+        self.assertEqual(
+            [item["id"] for item in items], [124, 119, 123, 115, 349, 348, 127]
+        )
+        self.assertEqual(
+            requests,
+            ["124,119", "123,125,115", "123", "125", "115", "349,348", "127"],
+        )
+
     def test_async_properties_recovers_from_batch_500_with_small_requests(self):
         api = AristonAPI("user", "password", api_url="https://example.test/api/")
         features = {DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}]}
