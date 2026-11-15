@@ -3,9 +3,9 @@
 import asyncio
 import unittest
 from datetime import date
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
-from ariston.ariston_api import ConnectionException
+from ariston.ariston_api import AristonAPI, ConnectionException
 from ariston.const import (
     ConsumptionProperties,
     ConsumptionTimeInterval,
@@ -28,6 +28,46 @@ from ariston.galevo_device import AristonGalevoDevice
 
 
 class AristonGalevoDeviceTests(unittest.TestCase):
+    def test_dhw_program_temperatures_are_typed_and_optional(self):
+        device = self.make_device()
+        device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP, "52.5")
+        device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP, 0)
+
+        self.assertEqual(device.dhw_program_comfort_temp_value, 52.5)
+        self.assertEqual(device.dhw_program_economy_temp_value, 0.0)
+        self.assertEqual(device.dhw_program_comfort_temp_unit, "°C")
+        self.assertEqual(device.dhw_program_economy_temp_unit, "°C")
+        device._update_state()
+        self.assertTrue(device.custom_features[DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP])
+        self.assertTrue(device.custom_features[DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP])
+
+        for item in device.data["items"]:
+            if item["id"] == DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP:
+                item[PropertyType.VALUE] = "nan"
+            elif item["id"] == DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP:
+                item[PropertyType.VALUE] = None
+        device._update_state()
+        self.assertIsNone(device.dhw_program_comfort_temp_value)
+        self.assertIsNone(device.dhw_program_economy_temp_value)
+        self.assertFalse(device.custom_features[DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP])
+        self.assertFalse(device.custom_features[DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP])
+
+        device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP, True)
+        self.assertIsNone(device.dhw_program_comfort_temp_value)
+
+        device.data["items"] = [
+            item for item in device.data["items"]
+            if item["id"] != DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP
+        ]
+        self.assertIsNone(device.dhw_program_economy_temp_value)
+        device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP, 45)
+        next(
+            item for item in device.data["items"]
+            if item["id"] == DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP
+        )[PropertyType.UNIT] = "%"
+        device._update_state()
+        self.assertFalse(device.custom_features[DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP])
+
     def make_device(self, metric=True):
         api = Mock()
         device = AristonGalevoDevice(
@@ -316,6 +356,34 @@ class AristonGalevoDeviceTests(unittest.TestCase):
                 self.assertEqual(device.data, fresh_data)
                 self.assertEqual(device.menu_items, previous_menu_items)
                 self.assertEqual(device.signal_strength_value, 4)
+
+    def test_async_update_state_survives_properties_batch_500(self):
+        device = self.make_device()
+        api = AristonAPI("user", "password")
+        device.api = api
+        requested_items = DeviceProperties.list(0)[:3]
+
+        async def post(path, body):
+            if len(body["items"]) > 2:
+                raise ConnectionException(500)
+            return {
+                "items": [
+                    {"id": item["id"], "zn": item["zn"], "value": 1}
+                    for item in body["items"]
+                ]
+            }
+
+        async def refresh():
+            with patch.object(api, "get_items", return_value=requested_items), patch.object(
+                api, "_async_post", new=AsyncMock(side_effect=post)
+            ), patch.object(api, "async_get_menu_items", new=AsyncMock(return_value=[])):
+                await device.async_update_state()
+
+        asyncio.run(refresh())
+        self.assertEqual(
+            [item["id"] for item in device.data["items"]],
+            [item["id"] for item in requested_items],
+        )
 
     def test_menu_http_failure_on_first_refresh_and_recovery(self):
         device = self.make_device()

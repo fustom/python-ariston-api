@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 
 import logging
+import math
 from datetime import date
 from typing import Any, Optional
 
@@ -85,6 +86,14 @@ class AristonGalevoDevice(AristonDevice):
         self.custom_features[DeviceProperties.CH_FLOW_TEMP] = (
             self.ch_flow_temp_value is not None
         )
+        for item_id in (
+            DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP,
+            DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP,
+        ):
+            self.custom_features[item_id] = (
+                self._get_dhw_program_temperature(item_id) is not None
+                and self._get_item_by_id(item_id, PropertyType.UNIT) in ("°C", "°F")
+            )
         self.custom_features[DeviceProperties.IS_QUIET] = (
             self.is_quiet_value is not None
         )
@@ -200,6 +209,45 @@ class AristonGalevoDevice(AristonDevice):
     def water_heater_target_temperature(self) -> Optional[float]:
         """Get water heater target temperature"""
         return self._get_item_by_id(DeviceProperties.DHW_TEMP, PropertyType.VALUE)
+
+    def _get_dhw_program_temperature(self, item_id: DeviceProperties) -> Optional[float]:
+        """Return a valid DHW program temperature, including zero."""
+        value = self._get_item_by_id(item_id, PropertyType.VALUE)
+        if isinstance(value, bool):
+            return None
+        try:
+            temperature = float(value)
+        except (TypeError, ValueError):
+            return None
+        return temperature if math.isfinite(temperature) else None
+
+    @property
+    def dhw_program_comfort_temp_value(self) -> Optional[float]:
+        """Get the DHW time program comfort temperature."""
+        return self._get_dhw_program_temperature(
+            DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP
+        )
+
+    @property
+    def dhw_program_comfort_temp_unit(self) -> Optional[str]:
+        """Get the DHW time program comfort temperature unit."""
+        return self._get_item_by_id(
+            DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP, PropertyType.UNIT
+        )
+
+    @property
+    def dhw_program_economy_temp_value(self) -> Optional[float]:
+        """Get the DHW time program economy temperature."""
+        return self._get_dhw_program_temperature(
+            DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP
+        )
+
+    @property
+    def dhw_program_economy_temp_unit(self) -> Optional[str]:
+        """Get the DHW time program economy temperature unit."""
+        return self._get_item_by_id(
+            DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP, PropertyType.UNIT
+        )
 
     @property
     def water_heater_temperature_decimals(self) -> int:

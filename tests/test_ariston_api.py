@@ -386,6 +386,109 @@ class AristonAPIRequestTests(unittest.TestCase):
 
         asyncio.run(run_all())
 
+    def test_async_properties_recovers_from_batch_500_with_small_requests(self):
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+        features = {DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}]}
+        items = [{"id": name, "zn": 0} for name in ("A", "B", "PlantMode")]
+        requests = []
+
+        async def post(path, body):
+            requests.append(body)
+            requested = [item["id"] for item in body["items"]]
+            if len(requested) > 2 or (
+                requested == ["PlantMode"] and not body["useCache"]
+            ):
+                raise ConnectionException(500)
+            return {
+                "features": features,
+                "items": [{"id": name} for name in requested],
+            }
+
+        async def exercise():
+            with patch.object(api, "get_items", return_value=items), patch.object(
+                api, "_async_post", new=AsyncMock(side_effect=post)
+            ):
+                return await api.async_get_properties("gw-1", features, "en", "si")
+
+        result = asyncio.run(exercise())
+        self.assertEqual(
+            [item["id"] for item in result["items"]], ["A", "B", "PlantMode"]
+        )
+        self.assertEqual(result["features"], features)
+        self.assertEqual(
+            [
+                ([item["id"] for item in body["items"]], body["useCache"])
+                for body in requests
+            ],
+            [
+                (["A", "B", "PlantMode"], False),
+                (["A", "B"], False),
+                (["PlantMode"], False),
+                (["PlantMode"], True),
+            ],
+        )
+
+    def test_async_properties_splits_failing_pair_before_using_cache(self):
+        api = AristonAPI("user", "password")
+        features = {DeviceFeatures.ZONES: []}
+        items = [{"id": name, "zn": 0} for name in ("A", "B", "C", "D")]
+        requests = []
+
+        async def post(path, body):
+            requested = [item["id"] for item in body["items"]]
+            requests.append((requested, body["useCache"]))
+            if len(requested) > 2 or requested == ["A", "B"]:
+                raise ConnectionException(500)
+            if requested == ["B"] and not body["useCache"]:
+                raise ConnectionException(500)
+            return {"items": [{"id": name} for name in requested]}
+
+        async def exercise():
+            with patch.object(api, "get_items", return_value=items), patch.object(
+                api, "_async_post", new=AsyncMock(side_effect=post)
+            ):
+                return await api.async_get_properties("gw-1", features, "en", "si")
+
+        result = asyncio.run(exercise())
+        self.assertEqual(
+            [item["id"] for item in result["items"]], ["A", "B", "C", "D"]
+        )
+        self.assertEqual(
+            requests,
+            [
+                (["A", "B", "C", "D"], False),
+                (["A", "B"], False),
+                (["A"], False),
+                (["B"], False),
+                (["B"], True),
+                (["C", "D"], False),
+            ],
+        )
+
+    def test_async_properties_does_not_hide_persistent_or_other_errors(self):
+        api = AristonAPI("user", "password")
+        features = {DeviceFeatures.ZONES: []}
+        items = [{"id": name, "zn": 0} for name in ("A", "B", "C", "D")]
+
+        async def exercise(status):
+            with patch.object(api, "get_items", return_value=items), patch.object(
+                api, "_async_post", new=AsyncMock(side_effect=ConnectionException(status))
+            ) as post:
+                with self.assertRaises(ConnectionException) as error:
+                    await api.async_get_properties("gw-1", features, "en", "si")
+                return error.exception, post.await_args_list
+
+        with self.assertLogs("ariston.ariston_api", level="WARNING") as logs:
+            server_error, server_calls = asyncio.run(exercise(500))
+        self.assertEqual(server_error.args, (500,))
+        self.assertEqual(len(server_calls), 4)
+        self.assertTrue(server_calls[-1].args[1]["useCache"])
+        self.assertIn("property A also failed with cache", logs.output[-1])
+
+        auth_error, auth_calls = asyncio.run(exercise(401))
+        self.assertEqual(auth_error.args, (401,))
+        self.assertEqual(len(auth_calls), 1)
+
     def test_async_write_endpoints_send_values_to_transport(self):
         api = AristonAPI("user", "password", api_url="https://example.test/api/")
         writes = (
