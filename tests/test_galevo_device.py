@@ -28,6 +28,46 @@ from ariston.galevo_device import AristonGalevoDevice
 
 
 class AristonGalevoDeviceTests(unittest.TestCase):
+    def test_dhw_program_temperatures_are_typed_and_optional(self):
+        device = self.make_device()
+        device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP, "52.5")
+        device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP, 0)
+
+        self.assertEqual(device.dhw_program_comfort_temp_value, 52.5)
+        self.assertEqual(device.dhw_program_economy_temp_value, 0.0)
+        self.assertEqual(device.dhw_program_comfort_temp_unit, "°C")
+        self.assertEqual(device.dhw_program_economy_temp_unit, "°C")
+        device._update_state()
+        self.assertTrue(device.custom_features[DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP])
+        self.assertTrue(device.custom_features[DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP])
+
+        for item in device.data["items"]:
+            if item["id"] == DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP:
+                item[PropertyType.VALUE] = "nan"
+            elif item["id"] == DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP:
+                item[PropertyType.VALUE] = None
+        device._update_state()
+        self.assertIsNone(device.dhw_program_comfort_temp_value)
+        self.assertIsNone(device.dhw_program_economy_temp_value)
+        self.assertFalse(device.custom_features[DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP])
+        self.assertFalse(device.custom_features[DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP])
+
+        device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP, True)
+        self.assertIsNone(device.dhw_program_comfort_temp_value)
+
+        device.data["items"] = [
+            item for item in device.data["items"]
+            if item["id"] != DeviceProperties.DHW_TIMEPROG_ECONOMY_TEMP
+        ]
+        self.assertIsNone(device.dhw_program_economy_temp_value)
+        device._set_item_by_id(DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP, 45)
+        next(
+            item for item in device.data["items"]
+            if item["id"] == DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP
+        )[PropertyType.UNIT] = "%"
+        device._update_state()
+        self.assertFalse(device.custom_features[DeviceProperties.DHW_TIMEPROG_COMFORT_TEMP])
+
     def make_device(self, metric=True):
         api = Mock()
         device = AristonGalevoDevice(
