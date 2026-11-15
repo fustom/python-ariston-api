@@ -686,6 +686,196 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         asyncio.run(device.async_update_energy())
         self.assertEqual(device.energy_account, {"LastMonth": [{"elect": 3, "cool": 7}]})
 
+    def test_heat_pump_menu_items_availability_getters_and_error_handling(self):
+        device = self.make_device()
+        device.features = {
+            DeviceFeatures.HP_SYS: True,
+            DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}],
+        }
+        hp_items = [
+            {
+                "id": MenuItemNames.SIGNAL_STRENGTH.value,
+                PropertyType.VALUE: 80,
+                PropertyType.UNIT: "%",
+            },
+            {
+                "id": MenuItemNames.CH_RETURN_TEMP.value,
+                PropertyType.VALUE: 3276.0,
+                PropertyType.UNIT: "°C",
+                "isEnum": False,
+                PropertyType.MIN: -3277.0,
+                PropertyType.MAX: 3276.0,
+            },
+            {
+                "id": MenuItemNames.CH_BACKUP_RESISTANCE_1.value,
+                PropertyType.VALUE: 0.0,
+                "isEnum": True,
+                PropertyType.MIN: 0.0,
+                PropertyType.MAX: 1.0,
+            },
+            {
+                "id": MenuItemNames.HP_MODE.value,
+                PropertyType.VALUE: 9.0,
+                "isEnum": True,
+                PropertyType.OPTIONS: {
+                    "0": "OFF",
+                    "3": "Heating",
+                    "9": "Defrost",
+                    "17": "Defrost",
+                },
+            },
+            {
+                "id": MenuItemNames.HP_OUTSIDE_AIR_TEMP.value,
+                PropertyType.VALUE: 0.0,
+                PropertyType.UNIT: "°C",
+                "isEnum": False,
+                PropertyType.MIN: -3277.0,
+                PropertyType.MAX: 3276.0,
+            },
+            {
+                "id": MenuItemNames.HP_WATER_FLOW_TEMP.value,
+                PropertyType.VALUE: 33.0,
+                PropertyType.UNIT: "°C",
+                "isEnum": False,
+                PropertyType.MIN: -3277.0,
+                PropertyType.MAX: 3276.0,
+            },
+            {
+                "id": MenuItemNames.CH_FLOW_TEMP_SYSTEM.value,
+                PropertyType.VALUE: -3276.8,
+                PropertyType.UNIT: "°C",
+                "isEnum": False,
+                PropertyType.MIN: -3276.8,
+                PropertyType.MAX: 3276.7,
+            },
+        ]
+        data_without_ch_flow = self.make_data()
+        data_without_ch_flow["items"] = [
+            item
+            for item in data_without_ch_flow["items"]
+            if item["id"] != DeviceProperties.CH_FLOW_TEMP
+        ]
+        device.api.get_properties.return_value = data_without_ch_flow
+        device.api.get_menu_items.return_value = hp_items
+
+        device.update_state()
+
+        device.api.get_menu_items.assert_called_once_with(
+            "gw-1", include_hybrid_items=True
+        )
+        self.assertFalse(
+            device.custom_features[str(MenuItemNames.CH_RETURN_TEMP.value)]
+        )
+        self.assertIsNone(device.ch_return_temp_value)
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.CH_BACKUP_RESISTANCE_1.value)]
+        )
+        self.assertTrue(device.custom_features[str(MenuItemNames.HP_MODE.value)])
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.HP_OUTSIDE_AIR_TEMP.value)]
+        )
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.HP_WATER_FLOW_TEMP.value)]
+        )
+        self.assertFalse(device.custom_features[DeviceProperties.CH_FLOW_TEMP])
+
+        self.assertIs(device.ch_backup_resistance_1_value, False)
+        self.assertEqual(device.hp_mode_value, "Defrost")
+        self.assertEqual(device.hp_mode_options, ["OFF", "Heating", "Defrost"])
+        self.assertEqual(device.hp_outside_air_temp_value, 0.0)
+        self.assertEqual(device.hp_outside_air_temp_unit, "°C")
+        self.assertEqual(device.hp_water_flow_temp_value, 33.0)
+        self.assertEqual(device.hp_water_flow_temp_unit, "°C")
+        self.assertIsNone(device.ch_flow_temp_value)
+        self.assertEqual(device.ch_flow_temp_unit, "°C")
+
+        device.api.async_get_properties = AsyncMock(return_value=data_without_ch_flow)
+        updated_hp = [
+            {
+                "id": MenuItemNames.CH_BACKUP_RESISTANCE_1.value,
+                PropertyType.VALUE: 1.0,
+                "isEnum": True,
+            },
+            {
+                "id": MenuItemNames.HP_MODE.value,
+                PropertyType.VALUE: 3.0,
+                PropertyType.OPTIONS: None,
+            },
+            {
+                "id": MenuItemNames.HP_OUTSIDE_AIR_TEMP.value,
+                PropertyType.VALUE: None,
+            },
+            {
+                "id": MenuItemNames.HP_WATER_FLOW_TEMP.value,
+                PropertyType.VALUE: 25.0,
+                "error": True,
+            },
+            {
+                "id": MenuItemNames.CH_FLOW_TEMP_SYSTEM.value,
+                PropertyType.VALUE: 31.0,
+                PropertyType.UNIT: "°C",
+            },
+        ]
+        device.api.async_get_menu_items = AsyncMock(return_value=updated_hp)
+        asyncio.run(device.async_update_state())
+        device.api.async_get_menu_items.assert_awaited_once_with(
+            "gw-1", include_hybrid_items=True
+        )
+        self.assertIs(device.ch_backup_resistance_1_value, True)
+        self.assertEqual(device.hp_mode_value, "3.0")
+        self.assertEqual(device.hp_mode_options, [])
+        self.assertFalse(
+            device.custom_features[str(MenuItemNames.HP_OUTSIDE_AIR_TEMP.value)]
+        )
+        self.assertFalse(
+            device.custom_features[str(MenuItemNames.HP_WATER_FLOW_TEMP.value)]
+        )
+        self.assertTrue(device.custom_features[DeviceProperties.CH_FLOW_TEMP])
+        self.assertEqual(device.ch_flow_temp_value, 31.0)
+        self.assertEqual(device.ch_flow_temp_unit, "°C")
+
+        device.menu_items = [
+            {
+                "id": MenuItemNames.PUMP_MODULATION.value,
+                PropertyType.VALUE: 100.0,
+                PropertyType.UNIT: "%",
+                "isEnum": False,
+                PropertyType.MIN: 0.0,
+                PropertyType.MAX: 100.0,
+            },
+            {
+                "id": MenuItemNames.HP_OUTSIDE_AIR_TEMP.value,
+                PropertyType.VALUE: -20.0,
+                PropertyType.UNIT: "°C",
+                "isEnum": False,
+                PropertyType.MIN: -20.0,
+                PropertyType.MAX: 50.0,
+            },
+            {"id": MenuItemNames.HP_MODE.value, PropertyType.VALUE: "Standby"},
+        ]
+        device._update_state()
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.PUMP_MODULATION.value)]
+        )
+        self.assertEqual(
+            device.get_menu_item_value(MenuItemNames.PUMP_MODULATION.value), 100.0
+        )
+        self.assertTrue(
+            device.custom_features[str(MenuItemNames.HP_OUTSIDE_AIR_TEMP.value)]
+        )
+        self.assertEqual(device.hp_outside_air_temp_value, -20.0)
+        self.assertEqual(
+            device.get_menu_item_value(MenuItemNames.HP_MODE.value), "Standby"
+        )
+        self.assertEqual(device.hp_mode_value, "Standby")
+        device.menu_items = [
+            {"id": MenuItemNames.HP_MODE.value, PropertyType.VALUE: None}
+        ]
+        self.assertIsNone(device.hp_mode_value)
+        self.assertIsNone(device.ch_backup_resistance_1_value)
+        device.menu_items = []
+        self.assertIsNone(device.hp_mode_value)
+
 
 if __name__ == "__main__":
     unittest.main()

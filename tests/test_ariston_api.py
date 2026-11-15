@@ -403,11 +403,21 @@ class AristonAPIRequestTests(unittest.TestCase):
             items = api.get_menu_items("gw-1", include_hybrid_items=True)
 
         self.assertEqual(
-            [item["id"] for item in items], [124, 119, 123, 115, 349, 348, 127]
+            [item["id"] for item in items],
+            [124, 119, 123, 115, 349, 348, 337, 340, 341, 127],
         )
         self.assertEqual(
             requests,
-            ["124,119", "123,125,115", "123", "125", "115", "349,348", "127"],
+            [
+                "124,119",
+                "123,125,115",
+                "123",
+                "125",
+                "115",
+                "349,348",
+                "337,340,341",
+                "127",
+            ],
         )
 
     def test_async_menu_items_fetch_optional_hybrid_groups_and_split_failures(self):
@@ -432,11 +442,21 @@ class AristonAPIRequestTests(unittest.TestCase):
         items = asyncio.run(exercise())
 
         self.assertEqual(
-            [item["id"] for item in items], [124, 119, 123, 115, 349, 348, 127]
+            [item["id"] for item in items],
+            [124, 119, 123, 115, 349, 348, 337, 340, 341, 127],
         )
         self.assertEqual(
             requests,
-            ["124,119", "123,125,115", "123", "125", "115", "349,348", "127"],
+            [
+                "124,119",
+                "123,125,115",
+                "123",
+                "125",
+                "115",
+                "349,348",
+                "337,340,341",
+                "127",
+            ],
         )
 
     def test_async_properties_recovers_from_batch_errors_with_small_requests(self):

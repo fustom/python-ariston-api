@@ -674,6 +674,9 @@ class MenuItemNames(IntEnum):
     GAS_POWER = 125
     DHW_FLOW_RATE = 127
     PUMP_MODULATION = 115
+    CH_BACKUP_RESISTANCE_1 = 337
+    HP_MODE = 340
+    HP_OUTSIDE_AIR_TEMP = 341
     HP_WATER_FLOW_TEMP = 348
     CH_FLOW_TEMP_SYSTEM = 349
 
@@ -691,9 +694,10 @@ class MenuItemNames(IntEnum):
 
     @classmethod
     def hybrid_groups(cls) -> tuple[tuple["MenuItemNames", ...], ...]:
-        """Return small groups of optional menu items for hybrid systems."""
+        """Return small groups of optional menu items for hybrid and heat pump systems."""
         return (
             (cls.CH_FLOW_TEMP_BOILER, cls.GAS_POWER, cls.PUMP_MODULATION),
             (cls.CH_FLOW_TEMP_SYSTEM, cls.HP_WATER_FLOW_TEMP),
+            (cls.CH_BACKUP_RESISTANCE_1, cls.HP_MODE, cls.HP_OUTSIDE_AIR_TEMP),
             (cls.DHW_FLOW_RATE,),
         )
