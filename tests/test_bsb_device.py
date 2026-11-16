@@ -78,6 +78,14 @@ class AristonBsbDeviceTests(unittest.TestCase):
         self.assertEqual(device.get_zone_ch_comf_temp(1)[PropertyType.VALUE], 21)
         self.assertEqual(device.get_zone_ch_red_temp(1)[PropertyType.VALUE], 17)
         self.assertEqual(device.get_zone_mode(1), BsbZoneMode.MANUAL)
+        # Ensure raw integer 0 (BsbZoneMode.OFF) is not treated as falsy/UNDEFINED
+        device.data[BsbDeviceProperties.ZONES]["1"][BsbZoneProperties.MODE][
+            PropertyType.VALUE
+        ] = BsbZoneMode.OFF.value
+        self.assertEqual(device.get_zone_mode(1), BsbZoneMode.OFF)
+        device.data[BsbDeviceProperties.ZONES]["1"][BsbZoneProperties.MODE][
+            PropertyType.VALUE
+        ] = BsbZoneMode.MANUAL.value
         self.assertEqual(device.get_zone_mode(2), BsbZoneMode.UNDEFINED)
         self.assertEqual(device.get_zone_mode_options(1), [0, 1, 3])
         self.assertTrue(device.is_zone_in_manual_mode(1))
