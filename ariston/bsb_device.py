@@ -81,7 +81,7 @@ class AristonBsbDevice(AristonDevice):
             .get(PropertyType.VALUE, None)
         )
 
-        if value is None
+        if value is None:
             return BsbZoneMode.UNDEFINED
         return BsbZoneMode(value)
 
