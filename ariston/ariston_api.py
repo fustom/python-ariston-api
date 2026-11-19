@@ -969,31 +969,20 @@ class AristonAPI:
                 ):
                     group, use_cache = pending.pop()
                     attempts += 1
-                    try:
-                        result = await self._async_request_properties(
-                            path, group, features, culture, use_cache, recovery=True
-                        )
-                    except (ConnectionException, TimeoutError) as error:
-                        if isinstance(error, ConnectionException) and error.args[:1] != (500,):
-                            raise
+                    received = await self._async_recover_property_group(
+                        path, group, features, culture, use_cache
+                    )
+                    if received is None:
                         failures += 1
                         if len(group) > 1:
                             pending.extend(split(group))
                         elif not use_cache:
                             pending.append((group, True))
                         continue
-                    group_keys = {(item["id"], item["zn"]) for item in group}
-                    received = {
-                        (item.get("id"), item.get("zn")): item
-                        for item in (result or {}).get("items", [])
-                    }
-                    valid = group_keys & received.keys()
-                    failures = 0 if valid else failures + 1
-                    recovered.update(
-                        (key, value) for key, value in received.items() if key in valid
-                    )
+                    failures = 0 if received else failures + 1
+                    recovered.update(received)
                     if use_cache:
-                        cached_keys.update(valid)
+                        cached_keys.update(received)
         except TimeoutError:
             pass
 
@@ -1008,6 +997,31 @@ class AristonAPI:
         if not recovered:
             raise initial_error
         raise _IncompleteProperties(properties, cached_keys) from initial_error
+
+    async def _async_recover_property_group(
+        self,
+        path: str,
+        group: list[dict[str, Any]],
+        features: dict[str, Any],
+        culture: str,
+        use_cache: bool,
+    ) -> dict[tuple[str, int], dict[str, Any]] | None:
+        """Return the requested items received, or None for a splittable failure."""
+        try:
+            result = await self._async_request_properties(
+                path, group, features, culture, use_cache, recovery=True
+            )
+        except (ConnectionException, TimeoutError) as error:
+            if isinstance(error, ConnectionException) and error.args[:1] != (500,):
+                raise
+            return None
+
+        group_keys = {(item["id"], item["zn"]) for item in group}
+        received = {
+            (item.get("id"), item.get("zn")): item
+            for item in (result or {}).get("items", [])
+        }
+        return {key: item for key, item in received.items() if key in group_keys}
 
     async def async_get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
         """Get BSB plant data."""
