@@ -949,13 +949,15 @@ class AristonAPI:
         if not items:
             raise initial_error
 
-        def split(
-            group: list[dict[str, Any]],
+        def fallback_groups(
+            group: list[dict[str, Any]], used_cache: bool = False
         ) -> list[tuple[list[dict[str, Any]], bool]]:
+            if len(group) == 1:
+                return [] if used_cache else [(group, True)]
             midpoint = (len(group) + 1) // 2
             return [(group[midpoint:], False), (group[:midpoint], False)]
 
-        pending = split(items) if len(items) > 1 else [(items, True)]
+        pending = fallback_groups(items)
         recovered: dict[tuple[str, int], dict[str, Any]] = {}
         cached_keys: set[tuple[str, int]] = set()
         attempts = failures = 0
@@ -974,10 +976,7 @@ class AristonAPI:
                     )
                     if received is None:
                         failures += 1
-                        if len(group) > 1:
-                            pending.extend(split(group))
-                        elif not use_cache:
-                            pending.append((group, True))
+                        pending.extend(fallback_groups(group, use_cache))
                         continue
                     failures = 0 if received else failures + 1
                     recovered.update(received)
