@@ -75,11 +75,15 @@ class AristonBsbDevice(AristonDevice):
 
     def get_zone_mode(self, zone: int) -> BsbZoneMode:
         """Get zone mode on value"""
-        return BsbZoneMode(
+        value = (
             self.get_zone(zone)
             .get(BsbZoneProperties.MODE, dict[str, Any]())
-            .get(PropertyType.VALUE, None) or BsbZoneMode.UNDEFINED
+            .get(PropertyType.VALUE, None)
         )
+
+        if value is None:
+            return BsbZoneMode.UNDEFINED
+        return BsbZoneMode(value)
 
     def get_zone_mode_options(self, zone: int) -> list[int]:
         """Get zone mode on options"""
