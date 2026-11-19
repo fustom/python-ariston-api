@@ -453,8 +453,9 @@ class AristonGalevoDeviceTests(unittest.TestCase):
                     await device.async_update_state()
 
                 previous_data = device.data
+                request = refresh()
                 with self.assertRaises(ConnectionException) as error:
-                    asyncio.run(refresh())
+                    asyncio.run(request)
 
                 self.assertEqual(error.exception.args, (status,))
                 self.assertIs(device.data, previous_data)

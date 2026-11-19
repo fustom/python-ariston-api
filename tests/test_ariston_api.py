@@ -537,8 +537,9 @@ class AristonAPIRequestTests(unittest.TestCase):
             ):
                 return await api.async_get_properties("gw-1", features, "en", "si")
 
+        request = exercise()
         with self.assertRaisesRegex(ConnectionException, "complete fresh snapshot") as error:
-            asyncio.run(exercise())
+            asyncio.run(request)
         self.assertEqual(error.exception.cached_keys, {("B", 0)})
         self.assertEqual(
             [item["id"] for item in error.exception.properties["items"]],
@@ -611,8 +612,9 @@ class AristonAPIRequestTests(unittest.TestCase):
             return {"items": body["items"]}
 
         with patch.object(api, "_async_post", side_effect=post) as transport:
+            request = api.async_get_properties("gw", features, "en", "si")
             with self.assertRaisesRegex(ConnectionException, "complete fresh snapshot"):
-                asyncio.run(api.async_get_properties("gw", features, "en", "si"))
+                asyncio.run(request)
 
         self.assertEqual(transport.await_count, 9)
         self.assertTrue(all(call.kwargs["is_retry"] for call in transport.await_args_list[1:]))
@@ -623,8 +625,9 @@ class AristonAPIRequestTests(unittest.TestCase):
         session = FakeAsyncSession(FakeAsyncResponse(status_code=500))
 
         with patch("ariston.ariston_api.aiohttp.ClientSession", return_value=session):
+            request = api.async_get_properties("gw", features, "en", "si")
             with self.assertRaises(ConnectionException) as error:
-                asyncio.run(api.async_get_properties("gw", features, "en", "si"))
+                asyncio.run(request)
 
         self.assertEqual(error.exception.args, (500,))
         self.assertEqual(len(session.calls), 5)
@@ -648,8 +651,9 @@ class AristonAPIRequestTests(unittest.TestCase):
             patch("ariston.ariston_api._RECOVERY_TIMEOUT_SECONDS", 0),
             patch.object(api, "_async_post", side_effect=post) as transport,
         ):
+            request = api.async_get_properties("gw", features, "en", "si")
             with self.assertRaises(ConnectionException) as error:
-                asyncio.run(api.async_get_properties("gw", features, "en", "si"))
+                asyncio.run(request)
 
         self.assertEqual(error.exception.args, (500,))
         self.assertEqual(transport.await_count, 2)
@@ -667,8 +671,9 @@ class AristonAPIRequestTests(unittest.TestCase):
                         ConnectionException(500), {"items": items[:1]}, last_response,
                     ]) as transport,
                 ):
+                    request = api.async_get_properties("gw", features, "en", "si")
                     with self.assertRaises(ConnectionException) as error:
-                        asyncio.run(api.async_get_properties("gw", features, "en", "si"))
+                        asyncio.run(request)
 
                 self.assertEqual(transport.await_count, 3)
                 if isinstance(last_response, ConnectionException):
