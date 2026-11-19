@@ -125,68 +125,59 @@ class AristonGalevoDevice(AristonDevice):
         if len(self.features) == 0:
             self.get_features()
 
-        self.data = self.api.get_properties(
-            self.gw,
-            self.features,
-            self.language_tag,
-            self.umsys,
+        data = self.api.get_properties(
+            self.gw, self.features, self.language_tag, self.umsys
         )
-        try:
-            self.menu_items = self.api.get_menu_items(
-                self.gw,
-                include_hybrid_items=self._should_include_hybrid_menu_items(),
-            )
-        except ConnectionException as error:
-            if not self._should_retain_menu_items_after_error(error):
-                raise
-        self._update_state()
+        menu_items = self.api.get_menu_items(
+            self.gw,
+            include_hybrid_items=self._should_include_hybrid_menu_items(),
+        )
+        self._apply_cloud_state(data, menu_items)
 
     async def async_update_state(self) -> None:
-        """Async update the device states from the cloud"""
-        if len(self.features) == 0:
+        """Async update the device states from the cloud."""
+        if not self.features:
             await self.async_get_features()
 
-        (self.data, self.menu_items) = await asyncio.gather(
+        # Wait for both requests to settle before accepting a new snapshot.
+        data, menu_items = await asyncio.gather(
             self.api.async_get_properties(
+                self.gw, self.features, self.language_tag, self.umsys
+            ),
+            self.api.async_get_menu_items(
                 self.gw,
-                self.features,
-                self.language_tag,
-                self.umsys,
+                include_hybrid_items=self._should_include_hybrid_menu_items(),
             ),
-            self._async_get_menu_items(
-                include_hybrid_items=self._should_include_hybrid_menu_items()
-            ),
+            return_exceptions=True,
         )
-        self._update_state()
+        for result in (data, menu_items):
+            if isinstance(result, BaseException):
+                raise result
+        self._apply_cloud_state(data, menu_items)
 
-    async def _async_get_menu_items(
-        self, include_hybrid_items: bool = False
-    ) -> list[dict[str, Any]]:
-        """Get menu items while retaining the last values for server errors."""
+    def _apply_cloud_state(
+        self, data: dict[str, Any], menu_items: list[dict[str, Any]]
+    ) -> None:
+        """Keep the last snapshot and capabilities when the response loses items."""
+        items = data.get("items", [])
+        keys = {(item.get("id"), item.get(PropertyType.ZONE)) for item in items}
+        previous_keys = {
+            (item.get("id"), item.get(PropertyType.ZONE))
+            for item in self.data.get("items", [])
+        }
+        if not keys or not previous_keys.issubset(keys):
+            raise ConnectionException("GALEVO property response is incomplete")
+
+        previous_data, previous_menu = self.data, self.menu_items
+        previous_features = self.custom_features.copy()
+        self.data, self.menu_items = data, menu_items
         try:
-            return await self.api.async_get_menu_items(
-                self.gw, include_hybrid_items=include_hybrid_items
-            )
-        except ConnectionException as error:
-            if not self._should_retain_menu_items_after_error(error):
-                raise
-            return self.menu_items
-
-    def _should_retain_menu_items_after_error(
-        self, error: ConnectionException
-    ) -> bool:
-        """Log and identify menu server errors that can use cached values."""
-        status = error.args[0] if error.args else None
-        if status not in (500, 550):
-            return False
-
-        _LOGGER.warning(
-            "Could not fetch menu items for gateway %s (HTTP %s); "
-            "retaining the last successful values",
-            self.gw,
-            status,
-        )
-        return True
+            self._update_state()
+        except Exception:
+            self.data, self.menu_items = previous_data, previous_menu
+            self.custom_features.clear()
+            self.custom_features.update(previous_features)
+            raise
 
     def _get_features(self) -> None:
         """Set custom features"""
