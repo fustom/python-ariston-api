@@ -141,6 +141,15 @@ _RATE_LIMITS: dict[tuple[str, str | None, int | None, str], _RateLimit] = {}
 _RATE_LIMITS_LOCK = Lock()
 
 
+def _property_fallback_groups(
+    group: list[dict[str, Any]], used_cache: bool = False
+) -> list[tuple[list[dict[str, Any]], bool]]:
+    if len(group) == 1:
+        return [] if used_cache else [(group, True)]
+    midpoint = (len(group) + 1) // 2
+    return [(group[midpoint:], False), (group[:midpoint], False)]
+
+
 class _IncompleteProperties(ConnectionException):
     """A recovery contains partial or provider-cached data."""
 
@@ -949,15 +958,7 @@ class AristonAPI:
         if not items:
             raise initial_error
 
-        def fallback_groups(
-            group: list[dict[str, Any]], used_cache: bool = False
-        ) -> list[tuple[list[dict[str, Any]], bool]]:
-            if len(group) == 1:
-                return [] if used_cache else [(group, True)]
-            midpoint = (len(group) + 1) // 2
-            return [(group[midpoint:], False), (group[:midpoint], False)]
-
-        pending = fallback_groups(items)
+        pending = _property_fallback_groups(items)
         recovered: dict[tuple[str, int], dict[str, Any]] = {}
         cached_keys: set[tuple[str, int]] = set()
         attempts = failures = 0
@@ -976,7 +977,7 @@ class AristonAPI:
                     )
                     if received is None:
                         failures += 1
-                        pending.extend(fallback_groups(group, use_cache))
+                        pending.extend(_property_fallback_groups(group, use_cache))
                         continue
                     failures = 0 if received else failures + 1
                     recovered.update(received)
