@@ -1,226 +1,176 @@
-"""Unit tests for the 429 rate-limit handling in ariston.ariston_api."""
+"""Tests for shared HTTP 429 cooldowns without real network calls or sleeps."""
 
 import asyncio
-import time
+from datetime import datetime, timezone
+from email.utils import format_datetime
+from types import SimpleNamespace
 import unittest
-from typing import Any, Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
-from ariston.ariston_api import (
-    AristonAPI,
-    ConnectionException,
-    _parse_block_seconds,
-)
+from ariston.ariston_api import AristonAPI, ConnectionException, _retry_after_seconds
 
 
-def _api() -> AristonAPI:
-    return AristonAPI("user", "pass")
+PATH = "https://example.test/api"
 
 
-def _sync_response(status: int, content: bytes = b"", json_data: Any = None):
-    response = MagicMock()
-    response.ok = status < 400
-    response.status_code = status
-    response.content = content
-    if json_data is not None:
-        response.json.return_value = json_data
-    return response
+def response(status, body=b"", retry_after=""):
+    return SimpleNamespace(
+        status=status,
+        status_code=status,
+        ok=status < 400,
+        content=body,
+        headers={"Retry-After": retry_after},
+        json=lambda: {"ok": True},
+    )
 
 
-class _FakeAiohttpContent:
-    def __init__(self, payload: bytes) -> None:
-        self._payload = payload
-
-    async def read(self) -> bytes:
-        return self._payload
-
-
-class _FakeAiohttpResponse:
-    def __init__(
-        self, status: int, payload: bytes = b"", json_data: Any = None
-    ) -> None:
-        self.status = status
-        self.ok = status < 400
-        self.content = _FakeAiohttpContent(payload)
-        self.content_length = len(payload)
-        self._json_data = json_data
-
-    async def json(self) -> Any:
-        return self._json_data
-
-
-def _fake_session_cls(responses: list, calls: list):
-    class _Session:
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_Session":
-            return self
-
-        async def __aexit__(self, *exc: Any) -> bool:
-            return False
-
-        async def request(self, *args: Any, **kwargs: Any):
-            calls.append(1)
-            return responses.pop(0)
-
-    return _Session
+def async_response(status, content=b"", retry_after=""):
+    result = response(status, content, retry_after)
+    result.content = SimpleNamespace(read=AsyncMock(return_value=content))
+    result.content_length = len(content)
+    result.json = AsyncMock(return_value={"ok": True})
+    return result
 
 
 class RateLimitTests(unittest.TestCase):
-    """429 handling: parse, sleep-out with a single retry, per-instance window."""
+    def setUp(self):
+        self.now = 100
+        self.clock = SimpleNamespace(monotonic=lambda: self.now, sleep=Mock())
+        self.enterContext(patch("ariston.ariston_api.time", self.clock))
+        self.enterContext(patch("ariston.ariston_api._RATE_LIMITS", {}))
+        self.api = AristonAPI("user", "pass", PATH)
 
-    # -- parse helper --
+    def assert_rate_limited(self, call):
+        with self.assertRaises(ConnectionException) as error:
+            call()
+        self.assertEqual(error.exception.args[0], 429)
 
-    def test_parse_block_seconds(self):
-        self.assertEqual(
-            _parse_block_seconds(b"Requests are blocked for 66 seconds"), 66
-        )
-        self.assertEqual(_parse_block_seconds(b"Requests are blocked for 5 seconds"), 5)
-        self.assertIsNone(_parse_block_seconds(b"Too many requests"))
-
-    # -- sync path (requests) --
-
-    def test_429_parses_wait_seconds(self):
-        responses = [
-            _sync_response(429, b"Requests are blocked for 66 seconds"),
-            _sync_response(200, b"{}", {"ok": True}),
-        ]
-        http = MagicMock(side_effect=responses)
-        sleeps: list[int] = []
-        api = _api()
-        with patch("ariston.ariston_api.requests.request", http), patch(
-            "ariston.ariston_api.time.sleep", side_effect=sleeps.append
-        ):
-            result = api._get("https://example/api")
-
-        self.assertEqual(result, {"ok": True})
-        self.assertEqual(http.call_count, 2)  # exactly one retry
-        self.assertEqual(sleeps, [67])  # parsed 66 + 1s margin
-        self.assertGreater(api._blocked_until, 0)  # block window was set
-
-    def test_429_without_parsable_body(self):
-        responses = [
-            _sync_response(429, b"Too many requests"),
-            _sync_response(200, b"{}", {"ok": True}),
-        ]
-        http = MagicMock(side_effect=responses)
-        sleeps: list[int] = []
-        with patch("ariston.ariston_api.requests.request", http), patch(
-            "ariston.ariston_api.time.sleep", side_effect=sleeps.append
-        ):
-            result = _api()._get("https://example/api")
-
-        self.assertEqual(result, {"ok": True})
-        self.assertEqual(sleeps, [5])  # documented fallback
-        self.assertEqual(http.call_count, 2)
-
-    def test_429_twice_raises(self):
-        body = b"Requests are blocked for 10 seconds"
-        http = MagicMock(
-            side_effect=[_sync_response(429, body), _sync_response(429, body)]
-        )
-        api = _api()
-        with patch("ariston.ariston_api.requests.request", http), patch(
-            "ariston.ariston_api.time.sleep"
-        ):
-            with self.assertRaises(ConnectionException):
-                api._get("https://example/api")
-
-        self.assertEqual(http.call_count, 2)  # one retry, then raise
-
-    def test_blocked_until_short_circuits(self):
-        api = _api()
-        api._blocked_until = time.time() + 30
-        http = MagicMock()
-        with patch("ariston.ariston_api.requests.request", http):
-            with self.assertRaises(ConnectionException):
-                api._get("https://example/api")
-
-        http.assert_not_called()  # no network call inside the block window
-
-    def test_block_window_is_per_instance(self):
-        """A 429 on one instance must not silence other instances."""
-        blocked = _api()
-        other = _api()
-        http = MagicMock(
+    def test_honors_longer_hint_and_shares_deadline_only_with_same_account_origin(self):
+        http = self.enterContext(patch(
+            "ariston.ariston_api.requests.request",
             side_effect=[
-                _sync_response(429, b"Requests are blocked for 30 seconds"),
-                _sync_response(200, b"{}", {"ok": True}),
-            ]
+                response(429, b"Blocked for 66 seconds", "20"),
+                response(200, b"{}"),
+                response(200, b"{}"),
+                response(200, b"{}"),
+            ],
+        ))
+        self.assert_rate_limited(lambda: self.api._get(PATH))
+        http.assert_called_once()
+        self.clock.sleep.assert_not_called()
+
+        same_account = AristonAPI("USER", "pass", f"{PATH}/v2")
+        self.now = 166
+        self.assert_rate_limited(lambda: same_account._get(PATH))
+        self.assertEqual(AristonAPI("other", "pass", PATH)._get(PATH), {"ok": True})
+        other_origin = AristonAPI("user", "pass", "https://other.test/api")
+        self.assertEqual(other_origin._get("https://other.test/api"), {"ok": True})
+
+        self.now = 167
+        self.assertEqual(same_account._get(PATH), {"ok": True})
+        self.assertEqual(http.call_count, 4)
+
+    def test_fallback_doubles_until_capped_and_success_resets_it(self):
+        limited = response(429, b"Too many requests", "invalid")
+        http = self.enterContext(patch(
+            "ariston.ariston_api.requests.request",
+            side_effect=[limited] * 6 + [response(200, b"{}"), limited],
+        ))
+        for delay in (60, 120, 240, 480, 900, 900):
+            self.assert_rate_limited(lambda: self.api._get(PATH))
+            self.now += delay - 1
+            self.assert_rate_limited(lambda: self.api._get(PATH))
+            self.now += 1
+
+        self.assertEqual(self.api._get(PATH), {"ok": True})
+        self.assert_rate_limited(lambda: self.api._get(PATH))
+        self.assertEqual(self.api._rate_limit.deadline, self.now + 60)
+        self.assertEqual(http.call_count, 8)
+
+    def test_retry_after_http_date(self):
+        now = datetime(2026, 11, 19, 10, tzinfo=timezone.utc)
+        date = datetime(2026, 11, 19, 10, 2, tzinfo=timezone.utc)
+        with patch("ariston.ariston_api.datetime", wraps=datetime) as clock:
+            clock.now.return_value = now
+            self.assertEqual(_retry_after_seconds(format_datetime(date, usegmt=True)), 120)
+
+    def test_server_error_retry_rechecks_cooldown(self):
+        peer = AristonAPI("user", "pass", PATH)
+        http = self.enterContext(patch(
+            "ariston.ariston_api.requests.request",
+            side_effect=[response(500), response(429, retry_after="80")],
+        ))
+        self.clock.sleep.side_effect = lambda _: self.assert_rate_limited(
+            lambda: peer._get(PATH)
         )
-        with patch("ariston.ariston_api.requests.request", http), patch(
-            "ariston.ariston_api.time.sleep"
-        ):
-            self.assertEqual(blocked._get("https://example/api"), {"ok": True})
+        self.assert_rate_limited(lambda: self.api._get(PATH))
+        self.assertEqual(http.call_count, 2)
+        self.assertEqual(self.api._rate_limit.deadline, 180)
 
-        self.assertGreater(blocked._blocked_until, 0)
-        self.assertEqual(other._blocked_until, 0.0)  # untouched by the 429
-
-    # -- async path (aiohttp) --
-
-    def test_async_429_parses_and_retries(self):
-        responses = [
-            _FakeAiohttpResponse(429, b"Requests are blocked for 66 seconds"),
-            _FakeAiohttpResponse(200, b"{}", {"ok": True}),
-        ]
-        calls: list[int] = []
-        sleeps: list[Optional[int]] = []
-
-        async def run() -> Any:
-            with patch(
-                "ariston.ariston_api.aiohttp.ClientSession",
-                _fake_session_cls(responses, calls),
-            ), patch(
-                "ariston.ariston_api.asyncio.sleep", side_effect=sleeps.append
-            ):
-                return await _api()._async_get("https://example/api")
-
-        result = asyncio.run(run())
-
-        self.assertEqual(result, {"ok": True})
-        self.assertEqual(len(calls), 2)  # exactly one retry
-        self.assertEqual(sleeps, [67])  # parsed 66 + 1s margin
-
-    def test_async_blocked_until_short_circuits(self):
-        calls: list[int] = []
-        api = _api()
-        api._blocked_until = time.time() + 30
-
-        async def run() -> None:
-            with patch(
-                "ariston.ariston_api.aiohttp.ClientSession",
-                _fake_session_cls([], calls),
+    def test_async_429_on_server_error_retry_sets_shared_cooldown(self):
+        async def exercise():
+            session = AsyncMock()
+            session.__aenter__.return_value = session
+            session.request.side_effect = [
+                async_response(500),
+                async_response(429, retry_after="70"),
+                async_response(200, b"{}"),
+            ]
+            with (
+                patch("ariston.ariston_api.aiohttp.ClientSession", return_value=session),
+                patch("ariston.ariston_api.asyncio.sleep", new=AsyncMock()) as sleep,
             ):
                 with self.assertRaises(ConnectionException):
-                    await api._async_get("https://example/api")
+                    await self.api._async_get(PATH)
+                with self.assertRaises(ConnectionException):
+                    await self.api._async_get(PATH)
+                self.assertEqual(session.request.await_count, 2)
+                sleep.assert_awaited_once_with(5)
+                self.now += 70
+                self.assertEqual(await self.api._async_get(PATH), {"ok": True})
 
-        asyncio.run(run())
+        asyncio.run(exercise())
 
-        self.assertEqual(calls, [])  # no network call inside the block window
+    def test_concurrent_429_responses_do_not_shorten_deadline_or_repeat_warning(self):
+        async def exercise():
+            entered = asyncio.Event()
+            release = asyncio.Event()
+            slow = async_response(429, retry_after="10")
 
-    def test_async_block_window_is_per_instance(self):
-        """Async twin: a 429 on one instance must not silence other instances."""
-        blocked = _api()
-        other = _api()
-        responses = [
-            _FakeAiohttpResponse(429, b"Requests are blocked for 30 seconds"),
-            _FakeAiohttpResponse(200, b"{}", {"ok": True}),
-        ]
-        calls: list[int] = []
+            async def read_body():
+                entered.set()
+                await release.wait()
+                return b""
 
-        async def run() -> Any:
-            with patch(
-                "ariston.ariston_api.aiohttp.ClientSession",
-                _fake_session_cls(responses, calls),
-            ), patch("ariston.ariston_api.asyncio.sleep"):
-                return await blocked._async_get("https://example/api")
+            slow.content.read.side_effect = read_body
+            session = AsyncMock()
+            session.__aenter__.return_value = session
 
-        self.assertEqual(asyncio.run(run()), {"ok": True})
+            async def first_request(*args, **kwargs):
+                # Both HTTP requests have started before either publishes a block.
+                await entered.wait()
+                return async_response(429, retry_after="90")
 
-        self.assertGreater(blocked._blocked_until, 0)
-        self.assertEqual(other._blocked_until, 0.0)  # untouched by the 429
+            async def concurrent_response(*args, **kwargs):
+                if session.request.await_count == 1:
+                    return await first_request()
+                return slow
 
+            session.request.side_effect = concurrent_response
+            with (
+                patch("ariston.ariston_api.aiohttp.ClientSession", return_value=session),
+                self.assertLogs("ariston.ariston_api", level="WARNING") as logs,
+            ):
+                first = asyncio.create_task(self.api._async_get(PATH))
+                second = asyncio.create_task(self.api._async_get(PATH))
+                await entered.wait()
+                self.assert_rate_limited(lambda: self.api._get(PATH))
+                release.set()
+                errors = await asyncio.gather(first, second, return_exceptions=True)
 
-if __name__ == "__main__":
-    unittest.main()
+            self.assertEqual([error.args[0] for error in errors], [429, 429])
+            self.assertEqual(self.api._rate_limit.deadline, 190)
+            self.assertEqual(len(logs.output), 1)
+            self.assertEqual(session.request.await_count, 2)
+
+        asyncio.run(exercise())

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import logging
 import re
+from threading import Lock
 import time
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
-import asyncio
 import aiohttp
 import requests
 
@@ -37,6 +41,7 @@ from .const import (
     LydosPlantMode,
     NuosSplitOperativeMode,
     PlantData,
+    PropertyType,
     ThermostatProperties,
     WaterHeaterMode,
     ZoneAttribute,
@@ -53,24 +58,122 @@ def _parse_block_seconds(content: bytes) -> Optional[int]:
     match = _RATE_LIMIT_RE.search(content)
     if match is None:
         return None
-    return int(match.group(1))
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
 
 
-def _rate_limit_wait_seconds(content: bytes) -> int:
-    """Effective wait for a 429: parsed duration + 1s margin, else 5s."""
-    parsed = _parse_block_seconds(content)
-    if parsed is None:
-        _LOGGER.warning(
-            "Rate limited (429) without parsable block duration; "
-            "falling back to 5s wait"
-        )
-        return 5
-    _LOGGER.warning("Rate limited (429) for %s seconds; waiting it out", parsed + 1)
-    return parsed + 1
+_RECOVERY_MAX_REQUESTS = 8
+_RECOVERY_TIMEOUT_SECONDS = 15
+_RECOVERY_MAX_CONSECUTIVE_FAILURES = 4
+_RATE_LIMIT_FALLBACK_SECONDS = 60
+_RATE_LIMIT_MAX_FALLBACK_SECONDS = 15 * 60
+
+
+def _retry_after_seconds(value: str) -> float | None:
+    """Parse either form of Retry-After."""
+    try:
+        if value.isascii() and value.isdecimal():
+            return float(int(value))
+        deadline = parsedate_to_datetime(value)
+        if deadline.tzinfo is not None:
+            return max(0, (deadline - datetime.now(timezone.utc)).total_seconds())
+    except (ValueError, TypeError, OverflowError):
+        pass
+    return None
 
 
 class ConnectionException(Exception):
     """When can not connect to Ariston cloud"""
+
+
+class _RateLimit:
+    """Coordinate authenticated requests for one account and API origin."""
+
+    def __init__(self) -> None:
+        self.deadline = 0.0
+        self.fallback = _RATE_LIMIT_FALLBACK_SECONDS
+        self.pending = 0
+        self.lock = Lock()
+
+    def check(self) -> float:
+        with self.lock:
+            if self.pending or time.monotonic() < self.deadline:
+                raise ConnectionException(429, "Ariston API cooldown active")
+            return self.deadline
+
+    def succeeded(self, previous_deadline: float) -> None:
+        with self.lock:
+            if self.deadline == previous_deadline and not self.pending:
+                self.fallback = _RATE_LIMIT_FALLBACK_SECONDS
+
+    def blocked(self, content: bytes, retry_after: str) -> None:
+        parsed = _parse_block_seconds(content)
+        try:
+            body_delay = float(parsed + 1) if parsed is not None else None
+        except OverflowError:
+            body_delay = None
+        hints = [
+            seconds
+            for seconds in (
+                body_delay,
+                _retry_after_seconds(retry_after),
+            )
+            if seconds is not None
+        ]
+        with self.lock:
+            now = time.monotonic()
+            if hints:
+                delay = max(hints)
+            else:
+                delay = self.fallback
+                if now >= self.deadline:
+                    self.fallback = min(delay * 2, _RATE_LIMIT_MAX_FALLBACK_SECONDS)
+                else:
+                    # Concurrent responses belong to the same cooldown.
+                    delay = 0
+            if now >= self.deadline:
+                _LOGGER.warning("Ariston API rate limited (429) for %.0f seconds", delay)
+            self.deadline = max(self.deadline, now + delay)
+
+
+_RATE_LIMITS: dict[tuple[str, str | None, int | None, str], _RateLimit] = {}
+_RATE_LIMITS_LOCK = Lock()
+
+
+def _property_fallback_groups(
+    group: list[dict[str, Any]], used_cache: bool = False
+) -> list[tuple[list[dict[str, Any]], bool]]:
+    if len(group) == 1:
+        return [] if used_cache else [(group, True)]
+    midpoint = (len(group) + 1) // 2
+    return [(group[midpoint:], False), (group[:midpoint], False)]
+
+
+def _expected_property_keys(
+    items: list[dict[str, Any]], features: dict[str, Any]
+) -> set[tuple[str, int]]:
+    """Return the property keys required for a complete GALEVO recovery."""
+    expected = {(item["id"], item["zn"]) for item in items}
+    if (
+        features.get(DeviceFeatures.HP_SYS) is True
+        or features.get(DeviceFeatures.HYBRID_SYS) is True
+    ):
+        # Heat pumps can expose this reading through menu item 349 instead.
+        expected.discard((DeviceProperties.CH_FLOW_TEMP, 0))
+    return expected
+
+
+class _IncompleteProperties(ConnectionException):
+    """A recovery contains partial or provider-cached data."""
+
+    def __init__(
+        self, properties: dict[str, Any], cached_keys: set[tuple[str, int]]
+    ) -> None:
+        super().__init__("GALEVO property refresh did not return a complete fresh snapshot")
+        self.properties = properties
+        self.cached_keys = frozenset(cached_keys)
 
 
 class AristonAPI:
@@ -93,10 +196,16 @@ class AristonAPI:
         # needs a running event loop) and logged in on first use.
         self.__r2_cookies: Optional[aiohttp.CookieJar] = None
         self.__r2_logged_in = False
-        # Per-instance 429 block window: instances for different accounts or
-        # API URLs must not silence each other; the three coordinators for
-        # one account still share one API instance.
-        self._blocked_until = 0.0
+        origin = urlsplit(api_url)
+        default_port = {"http": 80, "https": 443}.get(origin.scheme)
+        key = (
+            origin.scheme, origin.hostname, origin.port or default_port,
+            username.strip().casefold(),
+        )
+        with _RATE_LIMITS_LOCK:
+            if key not in _RATE_LIMITS:
+                _RATE_LIMITS[key] = _RateLimit()
+            self._rate_limit = _RATE_LIMITS[key]
         # Sync (requests) R2 web-app session; created lazily on first use.
         self.__r2_requests_session: Optional[requests.Session] = None
 
@@ -122,6 +231,8 @@ class AristonAPI:
 
             return True
 
+        except ConnectionException:
+            raise
         except Exception as error:
             raise ConnectionException() from error
 
@@ -567,11 +678,7 @@ class AristonAPI:
         is_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Request with requests"""
-        if not is_retry and time.time() < self._blocked_until:
-            raise ConnectionException(
-                429,
-                "Rate limited; skipping request until the block window ends",
-            )
+        deadline = self._rate_limit.check()
         headers: dict[str, Any] = {
             "User-Agent": self.__user_agent,
             "ar.authToken": self.__token,
@@ -597,15 +704,17 @@ class AristonAPI:
                 case 404:
                     return None
                 case 429:
-                    return self.__handle_rate_limit(
-                        response, is_retry, method, path, params, body
+                    self._rate_limit.blocked(
+                        response.content, response.headers.get("Retry-After", "")
                     )
+                    raise ConnectionException(429, "Ariston API rate limited")
                 case _:
                     if not is_retry:
                         time.sleep(5)
                         return self.__request(method, path, params, body, True)
                     raise ConnectionException(response.status_code)
 
+        self._rate_limit.succeeded(deadline)
         if len(response.content) > 0:
             json = response.json()
             _LOGGER.debug("Response %s", json)
@@ -616,24 +725,6 @@ class AristonAPI:
     def _post(self, path: str, body: Any) -> Any:
         """POST request"""
         return self.__request("POST", path, None, body)
-
-    def __handle_rate_limit(
-        self,
-        response,
-        is_retry: bool,
-        method: str,
-        path: str,
-        params: Optional[dict[str, Any]],
-        body: Any,
-    ) -> Optional[dict[str, Any]]:
-        """Sleep out the 429 block window, retry once, per-instance deadline."""
-        content = response.content
-        wait_seconds = _rate_limit_wait_seconds(content)
-        self._blocked_until = time.time() + wait_seconds
-        if not is_retry:
-            time.sleep(wait_seconds)
-            return self.__request(method, path, params, body, True)
-        raise ConnectionException(response.status_code, content.decode())
 
     def _get(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
         """GET request"""
@@ -748,6 +839,8 @@ class AristonAPI:
 
             return True
 
+        except ConnectionException:
+            raise
         except Exception as error:
             raise ConnectionException() from error
 
@@ -830,28 +923,19 @@ class AristonAPI:
     async def async_get_properties(
         self, gw_id: str, features: dict[str, Any], culture: str, umsys: str
     ) -> dict[str, Any]:
-        """Async get device properties"""
+        """Get a full GALEVO batch, splitting it only on transient failures."""
         path = f"{self.__api_url}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}/{gw_id}/get?umsys={umsys}"
         items = self.get_items(features)
         try:
-            properties = await self._async_request_properties(
+            return await self._async_request_properties(
                 path, items, features, culture, False
-            )
-        except (ConnectionException, asyncio.TimeoutError) as error:
-            if (
-                isinstance(error, ConnectionException)
-                and error.args[:1] != (500,)
-            ) or not items:
+            ) or {}
+        except (ConnectionException, TimeoutError) as error:
+            if isinstance(error, ConnectionException) and error.args[:1] != (500,):
                 raise
-            _LOGGER.warning(
-                "GALEVO properties batch failed with HTTP 500 or timed out; retrying in pairs"
-            )
-            properties = await self._async_recover_properties(
+            return await self._async_recover_properties(
                 path, items, features, culture, error
             )
-        if properties is not None:
-            return properties
-        return {}
 
     async def _async_request_properties(
         self,
@@ -860,8 +944,10 @@ class AristonAPI:
         features: dict[str, Any],
         culture: str,
         use_cache: bool,
+        *,
+        recovery: bool = False,
     ) -> Any:
-        """Request a group of GALEVO properties."""
+        """Send one property request, allowing reauthentication on the full batch."""
         return await self._async_post(
             path,
             {
@@ -871,78 +957,9 @@ class AristonAPI:
                 "culture": culture,
             },
             timeout_seconds=90,
+            retry_http_500=False,
+            is_retry=recovery,
         )
-
-    async def _async_cached_property(
-        self,
-        path: str,
-        item: dict[str, Any],
-        features: dict[str, Any],
-        culture: str,
-    ) -> Any:
-        """Retry a property with the provider cache after a server error or timeout."""
-        _LOGGER.warning(
-            "GALEVO property %s failed or timed out; trying cached value",
-            item["id"],
-        )
-        try:
-            return await self._async_request_properties(
-                path, [item], features, culture, True
-            )
-        except ConnectionException as error:
-            _LOGGER.warning(
-                "GALEVO property %s also failed with cache (HTTP %s)",
-                item["id"],
-                error.args[0] if error.args else "unknown",
-            )
-            raise
-
-    async def _async_recover_property(
-        self,
-        path: str,
-        item: dict[str, Any],
-        features: dict[str, Any],
-        culture: str,
-    ) -> Any:
-        """Retry one property fresh, then cached on server error or timeout."""
-        try:
-            return await self._async_request_properties(
-                path, [item], features, culture, False
-            )
-        except (ConnectionException, asyncio.TimeoutError) as error:
-            if isinstance(error, ConnectionException) and error.args[:1] != (500,):
-                raise
-            return await self._async_cached_property(path, item, features, culture)
-
-    async def _async_recover_property_chunk(
-        self,
-        path: str,
-        chunk: list[dict[str, Any]],
-        features: dict[str, Any],
-        culture: str,
-    ) -> list[dict[str, Any]]:
-        """Retry a pair, splitting on server error or timeout."""
-        try:
-            response = await self._async_request_properties(
-                path, chunk, features, culture, False
-            )
-        except (ConnectionException, asyncio.TimeoutError) as error:
-            if isinstance(error, ConnectionException) and error.args[:1] != (500,):
-                raise
-            if len(chunk) == 1:
-                response = await self._async_cached_property(
-                    path, chunk[0], features, culture
-                )
-                return response.get("items", []) if response else []
-            recovered = []
-            for item in chunk:
-                response = await self._async_recover_property(
-                    path, item, features, culture
-                )
-                if response:
-                    recovered.extend(response.get("items", []))
-            return recovered
-        return response.get("items", []) if response else []
 
     async def _async_recover_properties(
         self,
@@ -950,20 +967,76 @@ class AristonAPI:
         items: list[dict[str, Any]],
         features: dict[str, Any],
         culture: str,
-        initial_error: ConnectionException | asyncio.TimeoutError,
+        initial_error: ConnectionException | TimeoutError,
     ) -> dict[str, Any]:
-        """Collect pair retries, preserving the original error if none succeed."""
-        properties = {"features": features, "items": []}
-        for index in range(0, len(items), 2):
-            chunk = items[index : index + 2]
-            properties["items"].extend(
-                await self._async_recover_property_chunk(
-                    path, chunk, features, culture
-                )
-            )
-        if not properties["items"]:
+        """Bisect failed groups within a shared request and time budget."""
+        if not items:
             raise initial_error
-        return properties
+
+        pending = _property_fallback_groups(items)
+        recovered: dict[tuple[str, int], dict[str, Any]] = {}
+        cached_keys: set[tuple[str, int]] = set()
+        attempts = failures = 0
+        expected = _expected_property_keys(items, features)
+        try:
+            async with asyncio.timeout(_RECOVERY_TIMEOUT_SECONDS):
+                while (
+                    pending
+                    and attempts < _RECOVERY_MAX_REQUESTS
+                    and failures < _RECOVERY_MAX_CONSECUTIVE_FAILURES
+                ):
+                    group, use_cache = pending.pop()
+                    attempts += 1
+                    received = await self._async_recover_property_group(
+                        path, group, features, culture, use_cache
+                    )
+                    if received is None:
+                        failures += 1
+                        pending.extend(_property_fallback_groups(group, use_cache))
+                        continue
+                    failures = 0 if received else failures + 1
+                    recovered.update(received)
+                    if use_cache:
+                        cached_keys.update(received)
+        except TimeoutError:
+            pass
+
+        properties = {"features": features, "items": list(recovered.values())}
+        if recovered and expected.issubset(recovered) and not cached_keys:
+            _LOGGER.debug("Recovered complete GALEVO properties in %s requests", attempts)
+            return properties
+        _LOGGER.debug(
+            "Incomplete GALEVO recovery after %s requests: %s/%s required properties, %s cached",
+            attempts, len(expected.intersection(recovered)), len(expected), len(cached_keys),
+        )
+        if not recovered:
+            raise initial_error
+        raise _IncompleteProperties(properties, cached_keys) from initial_error
+
+    async def _async_recover_property_group(
+        self,
+        path: str,
+        group: list[dict[str, Any]],
+        features: dict[str, Any],
+        culture: str,
+        use_cache: bool,
+    ) -> dict[tuple[str, int], dict[str, Any]] | None:
+        """Return the requested items received, or None for a splittable failure."""
+        try:
+            result = await self._async_request_properties(
+                path, group, features, culture, use_cache, recovery=True
+            )
+        except (ConnectionException, TimeoutError) as error:
+            if isinstance(error, ConnectionException) and error.args[:1] != (500,):
+                raise
+            return None
+
+        group_keys = {(item["id"], item["zn"]) for item in group}
+        received = {
+            (item.get("id"), item.get(PropertyType.ZONE)): item
+            for item in (result or {}).get("items", [])
+        }
+        return {key: item for key, item in received.items() if key in group_keys}
 
     async def async_get_bsb_plant_data(self, gw_id: str) -> dict[str, Any]:
         """Get BSB plant data."""
@@ -1461,13 +1534,10 @@ class AristonAPI:
         body: Any = None,
         is_retry: bool = False,
         timeout_seconds: int = 30,
+        retry_http_500: bool = True,
     ) -> Optional[dict[str, Any]]:
         """Async request with aiohttp"""
-        if not is_retry and time.time() < self._blocked_until:
-            raise ConnectionException(
-                429,
-                "Rate limited; skipping request until the block window ends",
-            )
+        deadline = self._rate_limit.check()
         headers: dict[str, Any] = {
             "User-Agent": self.__user_agent,
             "ar.authToken": self.__token,
@@ -1493,7 +1563,8 @@ class AristonAPI:
                         if not is_retry:
                             if await self.async_connect():
                                 return await self.__async_request(
-                                    method, path, params, body, True, timeout_seconds
+                                    method, path, params, body, True, timeout_seconds,
+                                    retry_http_500,
                                 )
                             raise ConnectionException(
                                 "Login failed (password changed?)"
@@ -1502,17 +1573,16 @@ class AristonAPI:
                     case 404:
                         return None
                     case 429:
-                        return await self.__async_handle_rate_limit(
-                            response, is_retry, method, path, params, body, timeout_seconds
-                        )
+                        await self.__async_handle_rate_limit(response)
                     case _:
-                        if not is_retry:
+                        if not is_retry and (retry_http_500 or response.status != 500):
                             await asyncio.sleep(5)
                             return await self.__async_request(
                                 method, path, params, body, True, timeout_seconds
                             )
                         raise ConnectionException(response.status)
 
+            self._rate_limit.succeeded(deadline)
             if response.content_length and response.content_length > 0:
                 json = await response.json()
                 _LOGGER.debug("Response %s", json)
@@ -1521,33 +1591,36 @@ class AristonAPI:
             return None
 
     async def _async_post(
-        self, path: str, body: Any, timeout_seconds: int = 30
+        self,
+        path: str,
+        body: Any,
+        timeout_seconds: int = 30,
+        *,
+        retry_http_500: bool = True,
+        is_retry: bool = False,
     ) -> Any:
-        """Async POST request"""
+        """Async POST request."""
         return await self.__async_request(
-            "POST", path, None, body, timeout_seconds=timeout_seconds
+            "POST", path, None, body, is_retry, timeout_seconds, retry_http_500
         )
 
-    async def __async_handle_rate_limit(
-        self,
-        response,
-        is_retry: bool,
-        method: str,
-        path: str,
-        params: Optional[dict[str, Any]],
-        body: Any,
-        timeout_seconds: int,
-    ) -> Optional[dict[str, Any]]:
-        """Sleep out the 429 block window, retry once, share the deadline."""
-        content = await response.content.read()
-        wait_seconds = _rate_limit_wait_seconds(content)
-        self._blocked_until = time.time() + wait_seconds
-        if not is_retry:
-            await asyncio.sleep(wait_seconds)
-            return await self.__async_request(
-                method, path, params, body, True, timeout_seconds
-            )
-        raise ConnectionException(response.status, content)
+    async def __async_handle_rate_limit(self, response: aiohttp.ClientResponse) -> None:
+        """Close the request gate while reading the server's cooldown hints."""
+        with self._rate_limit.lock:
+            self._rate_limit.pending += 1
+        content = b""
+        try:
+            async with asyncio.timeout(1):
+                content = await response.content.read()
+        except (aiohttp.ClientError, TimeoutError):
+            pass
+        finally:
+            try:
+                self._rate_limit.blocked(content, response.headers.get("Retry-After", ""))
+            finally:
+                with self._rate_limit.lock:
+                    self._rate_limit.pending -= 1
+        raise ConnectionException(429, "Ariston API rate limited")
 
     async def _async_get(
         self, path: str, params: Optional[dict[str, Any]] = None
