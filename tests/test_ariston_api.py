@@ -11,6 +11,8 @@ from ariston.const import (
     BsbOperativeMode,
     BsbZoneMode,
     DeviceFeatures,
+    DeviceProperties,
+    PropertyType,
     EvoPlantMode,
     LydosPlantMode,
     NuosSplitOperativeMode,
@@ -497,7 +499,7 @@ class AristonAPIRequestTests(unittest.TestCase):
                         raise failure
                     return {
                         "features": features,
-                        "items": [{"id": name, "zn": 0} for name in requested],
+                        "items": [{"id": name, PropertyType.ZONE: 0} for name in requested],
                     }
 
                 async def exercise():
@@ -529,7 +531,7 @@ class AristonAPIRequestTests(unittest.TestCase):
                 raise ConnectionException(500)
             if requested == ["B"] and not body["useCache"]:
                 raise ConnectionException(500)
-            return {"items": [{"id": name, "zn": 0} for name in requested]}
+            return {"items": [{"id": name, PropertyType.ZONE: 0} for name in requested]}
 
         async def exercise():
             with patch.object(api, "get_items", return_value=items), patch.object(
@@ -579,25 +581,39 @@ class AristonAPIRequestTests(unittest.TestCase):
         self.assertEqual(auth_error.args, (401,))
         self.assertEqual(len(auth_calls), 1)
 
-    def test_galevo_full_batch_and_two_zone_recovery_preserve_every_request_key(self):
-        features = {DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}, {ZoneAttribute.NUM: 2}]}
-        for fail_batch in (False, True):
-            with self.subTest(fail_batch=fail_batch):
-                api = AristonAPI("user", "password")
-                items = api.get_items(features)
+    def test_galevo_full_batch_and_two_zone_recovery_use_response_zones(self):
+        for heat_pump in (False, True):
+            for fail_batch in (False, True):
+                with self.subTest(heat_pump=heat_pump, fail_batch=fail_batch):
+                    self._assert_two_zone_properties(heat_pump, fail_batch)
 
-                async def post(path, body, **kwargs):
-                    if fail_batch and body["items"] == items:
-                        raise ConnectionException(500)
-                    return {"items": body["items"]}
+    def _assert_two_zone_properties(self, heat_pump, fail_batch):
+        features = {
+            DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}, {ZoneAttribute.NUM: 2}],
+            DeviceFeatures.HP_SYS: heat_pump,
+        }
+        api = AristonAPI("user", "password")
+        items = api.get_items(features)
 
-                with patch.object(api, "_async_post", side_effect=post) as transport:
-                    result = asyncio.run(api.async_get_properties("gw", features, "en", "si"))
+        def response_rows(requested):
+            return [
+                {"id": item["id"], PropertyType.ZONE: item["zn"], "value": item["zn"]}
+                for item in requested
+                if not heat_pump or item["id"] != DeviceProperties.CH_FLOW_TEMP
+            ]
 
-                self.assertEqual(result["items"], items)
-                self.assertEqual(transport.await_count, 3 if fail_batch else 1)
-                self.assertEqual(transport.await_args_list[0].args[1]["items"], items)
-                self.assertFalse(transport.await_args_list[0].kwargs["retry_http_500"])
+        async def post(path, body, **kwargs):
+            if fail_batch and body["items"] == items:
+                raise ConnectionException(500)
+            return {"items": response_rows(body["items"])}
+
+        with patch.object(api, "_async_post", side_effect=post) as transport:
+            result = asyncio.run(api.async_get_properties("gw", features, "en", "si"))
+
+        self.assertEqual(result["items"], response_rows(items))
+        self.assertEqual(transport.await_count, 3 if fail_batch else 1)
+        self.assertEqual(transport.await_args_list[0].args[1]["items"], items)
+        self.assertFalse(transport.await_args_list[0].kwargs["retry_http_500"])
 
     def test_recovery_enforces_request_budget_after_intermittent_failures(self):
         api = AristonAPI("user", "password")
@@ -609,7 +625,12 @@ class AristonAPIRequestTests(unittest.TestCase):
             attempts += 1
             if attempts in (1, 2, 3, 4, 6, 8):
                 raise ConnectionException(500)
-            return {"items": body["items"]}
+            return {
+                "items": [
+                    {"id": item["id"], PropertyType.ZONE: item["zn"]}
+                    for item in body["items"]
+                ]
+            }
 
         with patch.object(api, "_async_post", side_effect=post) as transport:
             request = api.async_get_properties("gw", features, "en", "si")
@@ -665,10 +686,11 @@ class AristonAPIRequestTests(unittest.TestCase):
             with self.subTest(last_response=last_response):
                 api = AristonAPI("user", "password")
                 items = [{"id": "SameProperty", "zn": zn} for zn in (1, 2)]
+                response = {"id": "SameProperty", PropertyType.ZONE: 1}
                 with (
                     patch.object(api, "get_items", return_value=items),
                     patch.object(api, "_async_post", side_effect=[
-                        ConnectionException(500), {"items": items[:1]}, last_response,
+                        ConnectionException(500), {"items": [response]}, last_response,
                     ]) as transport,
                 ):
                     request = api.async_get_properties("gw", features, "en", "si")
@@ -679,7 +701,7 @@ class AristonAPIRequestTests(unittest.TestCase):
                 if isinstance(last_response, ConnectionException):
                     self.assertIs(error.exception, last_response)
                 else:
-                    self.assertEqual(error.exception.properties["items"], items[:1])
+                    self.assertEqual(error.exception.properties["items"], [response])
 
     def test_async_write_endpoints_send_values_to_transport(self):
         api = AristonAPI("user", "password", api_url="https://example.test/api/")

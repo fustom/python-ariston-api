@@ -41,6 +41,7 @@ from .const import (
     LydosPlantMode,
     NuosSplitOperativeMode,
     PlantData,
+    PropertyType,
     ThermostatProperties,
     WaterHeaterMode,
     ZoneAttribute,
@@ -148,6 +149,20 @@ def _property_fallback_groups(
         return [] if used_cache else [(group, True)]
     midpoint = (len(group) + 1) // 2
     return [(group[midpoint:], False), (group[:midpoint], False)]
+
+
+def _expected_property_keys(
+    items: list[dict[str, Any]], features: dict[str, Any]
+) -> set[tuple[str, int]]:
+    """Return the property keys required for a complete GALEVO recovery."""
+    expected = {(item["id"], item["zn"]) for item in items}
+    if (
+        features.get(DeviceFeatures.HP_SYS) is True
+        or features.get(DeviceFeatures.HYBRID_SYS) is True
+    ):
+        # Heat pumps can expose this reading through menu item 349 instead.
+        expected.discard((DeviceProperties.CH_FLOW_TEMP, 0))
+    return expected
 
 
 class _IncompleteProperties(ConnectionException):
@@ -962,7 +977,7 @@ class AristonAPI:
         recovered: dict[tuple[str, int], dict[str, Any]] = {}
         cached_keys: set[tuple[str, int]] = set()
         attempts = failures = 0
-        expected = {(item["id"], item["zn"]) for item in items}
+        expected = _expected_property_keys(items, features)
         try:
             async with asyncio.timeout(_RECOVERY_TIMEOUT_SECONDS):
                 while (
@@ -987,12 +1002,12 @@ class AristonAPI:
             pass
 
         properties = {"features": features, "items": list(recovered.values())}
-        if recovered.keys() == expected and not cached_keys and expected:
+        if recovered and expected.issubset(recovered) and not cached_keys:
             _LOGGER.debug("Recovered complete GALEVO properties in %s requests", attempts)
             return properties
         _LOGGER.debug(
-            "Incomplete GALEVO recovery after %s requests: %s/%s properties, %s cached",
-            attempts, len(recovered), len(expected), len(cached_keys),
+            "Incomplete GALEVO recovery after %s requests: %s/%s required properties, %s cached",
+            attempts, len(expected.intersection(recovered)), len(expected), len(cached_keys),
         )
         if not recovered:
             raise initial_error
@@ -1018,7 +1033,7 @@ class AristonAPI:
 
         group_keys = {(item["id"], item["zn"]) for item in group}
         received = {
-            (item.get("id"), item.get("zn")): item
+            (item.get("id"), item.get(PropertyType.ZONE)): item
             for item in (result or {}).get("items", [])
         }
         return {key: item for key, item in received.items() if key in group_keys}

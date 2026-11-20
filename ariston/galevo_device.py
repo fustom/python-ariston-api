@@ -49,6 +49,7 @@ class AristonGalevoDevice(AristonDevice):
         self.consumptions_settings: dict[str, Any] = {}
         self.energy_account: dict[str, Any] = {}
         self.menu_items: list[dict[str, Any]] = []
+        self.menu_items_fresh = False
 
     @property
     def consumption_type(self) -> str:
@@ -122,20 +123,24 @@ class AristonGalevoDevice(AristonDevice):
 
     def update_state(self) -> None:
         """Update the device states from the cloud"""
-        if len(self.features) == 0:
+        self.menu_items_fresh = False
+        if not self.features:
             self.get_features()
 
         data = self.api.get_properties(
             self.gw, self.features, self.language_tag, self.umsys
         )
-        menu_items = self.api.get_menu_items(
-            self.gw,
-            include_hybrid_items=self._should_include_hybrid_menu_items(),
-        )
+        try:
+            menu_items = self.api.get_menu_items(
+                self.gw, include_hybrid_items=self._should_include_hybrid_menu_items()
+            )
+        except ConnectionException as error:
+            menu_items = self._menu_refresh_result(error)
         self._apply_cloud_state(data, menu_items)
 
     async def async_update_state(self) -> None:
         """Async update the device states from the cloud."""
+        self.menu_items_fresh = False
         if not self.features:
             await self.async_get_features()
 
@@ -150,13 +155,24 @@ class AristonGalevoDevice(AristonDevice):
             ),
             return_exceptions=True,
         )
-        for result in (data, menu_items):
-            if isinstance(result, BaseException):
-                raise result
-        self._apply_cloud_state(data, menu_items)
+        if isinstance(data, BaseException):
+            raise data
+        self._apply_cloud_state(data, self._menu_refresh_result(menu_items))
+
+    @staticmethod
+    def _menu_refresh_result(
+        result: list[dict[str, Any]] | BaseException,
+    ) -> list[dict[str, Any]] | None:
+        """Keep cached menu values after a transient menu server error."""
+        if not isinstance(result, BaseException):
+            return result
+        if isinstance(result, ConnectionException) and result.args[:1] in ((500,), (550,)):
+            _LOGGER.debug("Keeping cached GALEVO menu items after HTTP %s", result.args[0])
+            return None
+        raise result
 
     def _apply_cloud_state(
-        self, data: dict[str, Any], menu_items: list[dict[str, Any]]
+        self, data: dict[str, Any], menu_items: list[dict[str, Any]] | None
     ) -> None:
         """Keep the last snapshot and capabilities when the response loses items."""
         items = data.get("items", [])
@@ -165,12 +181,17 @@ class AristonGalevoDevice(AristonDevice):
             (item.get("id"), item.get(PropertyType.ZONE))
             for item in self.data.get("items", [])
         }
+        if DeviceFeatures.ZONES in self.features:
+            active_zones = {0, *self.zone_numbers}
+            previous_keys = {key for key in previous_keys if key[1] in active_zones}
         if not keys or not previous_keys.issubset(keys):
             raise ConnectionException("GALEVO property response is incomplete")
 
         previous_data, previous_menu = self.data, self.menu_items
         previous_features = self.custom_features.copy()
-        self.data, self.menu_items = data, menu_items
+        self.data = data
+        if menu_items is not None:
+            self.menu_items = menu_items
         try:
             self._update_state()
         except Exception:
@@ -178,6 +199,7 @@ class AristonGalevoDevice(AristonDevice):
             self.custom_features.clear()
             self.custom_features.update(previous_features)
             raise
+        self.menu_items_fresh = menu_items is not None
 
     def _get_features(self) -> None:
         """Set custom features"""

@@ -437,7 +437,7 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         asyncio.run(refresh_without_features())
         async_no_features.api.async_get_features_for_device.assert_awaited_once_with("gw-1")
 
-    def test_menu_http_500_and_550_keep_previous_snapshot(self):
+    def test_menu_http_500_and_550_refresh_properties_with_stale_menu(self):
         for status in (500, 550):
             with self.subTest(status=status):
                 device = self.make_device()
@@ -449,16 +449,11 @@ class AristonGalevoDeviceTests(unittest.TestCase):
                     side_effect=ConnectionException(status)
                 )
 
-                async def refresh():
-                    await device.async_update_state()
+                device.menu_items_fresh = True
+                asyncio.run(device.async_update_state())
 
-                previous_data = device.data
-                request = refresh()
-                with self.assertRaises(ConnectionException) as error:
-                    asyncio.run(request)
-
-                self.assertEqual(error.exception.args, (status,))
-                self.assertIs(device.data, previous_data)
+                self.assertIs(device.data, fresh_data)
+                self.assertFalse(device.menu_items_fresh)
                 self.assertEqual(device.menu_items, previous_menu_items)
                 self.assertEqual(device.signal_strength_value, 4)
 
@@ -492,7 +487,7 @@ class AristonGalevoDeviceTests(unittest.TestCase):
                         raise failure
                     return {
                         "items": [
-                            {"id": item["id"], "zn": item["zn"], "value": 1}
+                            {"id": item["id"], PropertyType.ZONE: item["zn"], "value": 1}
                             for item in body["items"]
                         ]
                     }
@@ -517,7 +512,7 @@ class AristonGalevoDeviceTests(unittest.TestCase):
             async def json(self):
                 return {
                     "items": [
-                        {"id": item["id"], "zn": item["zn"], "value": 1}
+                        {"id": item["id"], PropertyType.ZONE: item["zn"], "value": 1}
                         for item in requested_items
                     ]
                 }
@@ -555,14 +550,15 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         device.data = {}
 
         async def refresh_twice():
-            with self.assertRaises(ConnectionException):
-                await device.async_update_state()
+            await device.async_update_state()
             self.assertEqual(device.menu_items, [])
-            self.assertEqual(device.data, {})
+            self.assertEqual(device.data, self.make_data())
+            self.assertFalse(device.menu_items_fresh)
             await device.async_update_state()
 
         asyncio.run(refresh_twice())
 
+        self.assertTrue(device.menu_items_fresh)
         self.assertEqual(device.menu_items, [{"id": 1, PropertyType.VALUE: 3}])
 
     def test_primary_properties_and_non_transient_menu_errors_still_raise(self):
@@ -610,6 +606,27 @@ class AristonGalevoDeviceTests(unittest.TestCase):
 
         asyncio.run(refresh())
 
+    def test_refresh_accepts_snapshot_after_zone_is_removed(self):
+        device = self.make_device()
+        fresh_data = self.make_data()
+        device.features[DeviceFeatures.ZONES].append({ZoneAttribute.NUM: 2})
+        device.data["items"].append(
+            {"id": ThermostatProperties.ZONE_MEASURED_TEMP, PropertyType.ZONE: 2}
+        )
+        device.api.async_get_features_for_device = AsyncMock(
+            return_value={DeviceFeatures.ZONES: [{ZoneAttribute.NUM: 1}]}
+        )
+        device.api.async_get_properties = AsyncMock(return_value=fresh_data)
+        device.api.async_get_menu_items = AsyncMock(return_value=device.menu_items)
+
+        async def refresh():
+            await device.async_get_features()
+            await device.async_update_state()
+
+        asyncio.run(refresh())
+        self.assertEqual(device.zone_numbers, [1])
+        self.assertIs(device.data, fresh_data)
+
     def test_sync_menu_http_failure_preserves_previous_items(self):
         device = self.make_device()
         previous_menu_items = list(device.menu_items)
@@ -618,11 +635,11 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         device.api.get_properties.return_value = fresh_data
         device.api.get_menu_items.side_effect = ConnectionException(500)
 
-        previous_data = device.data
-        with self.assertRaises(ConnectionException):
-            device.update_state()
+        device.menu_items_fresh = True
+        device.update_state()
 
-        self.assertIs(device.data, previous_data)
+        self.assertIs(device.data, fresh_data)
+        self.assertFalse(device.menu_items_fresh)
         self.assertEqual(device.menu_items, previous_menu_items)
 
     def test_sync_non_transient_menu_errors_still_raise(self):
