@@ -286,6 +286,90 @@ class RateLimitTests(unittest.TestCase):
         self.assertEqual(api._rate_limit_streak, 1)
         self.assertGreater(api._blocked_until - time.time(), 50)
 
+    def test_async_overlapping_429_sends_single_retry(self):
+        api = _api()
+        responses = [
+            _FakeAiohttpResponse(429, b"Requests are blocked"),
+            _FakeAiohttpResponse(429, b"Requests are blocked"),
+            _FakeAiohttpResponse(429, b"Requests are blocked"),
+        ]
+        calls: list[int] = []
+        sleeps: list[int] = []
+        real_sleep = asyncio.sleep
+
+        class _OverlappingSession:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                pass
+
+            async def __aenter__(self) -> "_OverlappingSession":
+                return self
+
+            async def __aexit__(self, *exc: Any) -> bool:
+                return False
+
+            async def request(self, *args: Any, **kwargs: Any):
+                calls.append(1)
+                await real_sleep(0)
+                return responses.pop(0)
+
+        async def fake_sleep(seconds: int) -> None:
+            sleeps.append(seconds)
+            await real_sleep(0)
+
+        async def run():
+            with patch(
+                "ariston.ariston_api.aiohttp.ClientSession",
+                _OverlappingSession,
+            ), patch("ariston.ariston_api.asyncio.sleep", side_effect=fake_sleep):
+                return await asyncio.gather(
+                    api._async_get("https://example/api/a"),
+                    api._async_get("https://example/api/b"),
+                    return_exceptions=True,
+                )
+
+        results = asyncio.run(run())
+        self.assertEqual(len(calls), 3)  # 2 initial calls + 1 single claimed retry
+        self.assertEqual(sleeps, [5, 5])
+        self.assertEqual(api._rate_limit_streak, 1)
+        self.assertTrue(all(isinstance(res, ConnectionException) for res in results))
+
+    def test_retry_after_still_retries_when_streak_is_nonzero(self):
+        for is_async in (False, True):
+            with self.subTest(is_async=is_async):
+                api = _api()
+                api._rate_limit_streak = 1
+                sleeps: list[int] = []
+                if not is_async:
+                    r1 = _sync_response(429, b"Requests are blocked")
+                    r1.headers = {"Retry-After": "8"}
+                    http = MagicMock(side_effect=[r1, _sync_response(200, b"{}", {"ok": True})])
+                    with patch("ariston.ariston_api.requests.request", http), patch(
+                        "ariston.ariston_api.time.sleep", side_effect=sleeps.append
+                    ):
+                        result = api._get("https://example/api")
+                    self.assertEqual(http.call_count, 2)
+                else:
+                    r1 = _FakeAiohttpResponse(429, b"Requests are blocked")
+                    r1.headers = {"Retry-After": "8"}
+                    responses = [r1, _FakeAiohttpResponse(200, b"{}", {"ok": True})]
+                    calls: list[int] = []
+
+                    async def run_async():
+                        with patch(
+                            "ariston.ariston_api.aiohttp.ClientSession",
+                            _fake_session_cls(responses, calls),
+                        ), patch(
+                            "ariston.ariston_api.asyncio.sleep", side_effect=sleeps.append
+                        ):
+                            return await api._async_get("https://example/api")
+
+                    result = asyncio.run(run_async())
+                    self.assertEqual(len(calls), 2)
+
+                self.assertEqual(result, {"ok": True})
+                self.assertEqual(sleeps, [9])
+                self.assertEqual(api._rate_limit_streak, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
