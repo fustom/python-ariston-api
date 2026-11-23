@@ -876,6 +876,24 @@ class AristonGalevoDeviceTests(unittest.TestCase):
         device.menu_items = []
         self.assertIsNone(device.hp_mode_value)
 
+    def test_zero_ch_return_temperature_is_unavailable_but_other_zero_values_are_valid(self):
+        device = self.make_device()
+        device.menu_items = [
+            {
+                "id": MenuItemNames.CH_RETURN_TEMP.value,
+                PropertyType.VALUE: 0.0,
+                PropertyType.UNIT: "°C",
+            },
+            {
+                "id": MenuItemNames.HP_OUTSIDE_AIR_TEMP.value,
+                PropertyType.VALUE: 0.0,
+                PropertyType.UNIT: "°C",
+            },
+        ]
+
+        self.assertIsNone(device.ch_return_temp_value)
+        self.assertEqual(device.hp_outside_air_temp_value, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

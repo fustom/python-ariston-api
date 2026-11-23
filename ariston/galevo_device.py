@@ -31,6 +31,7 @@ from .device import AristonDevice
 
 _LOGGER = logging.getLogger(__name__)
 _MENU_ITEM_UNAVAILABLE_VALUES = frozenset({3276.0, 3276.7, -3276.8, -3277.0})
+_CH_RETURN_TEMP_UNAVAILABLE_VALUES = _MENU_ITEM_UNAVAILABLE_VALUES | {0.0}
 
 
 class AristonGalevoDevice(AristonDevice):
@@ -816,7 +817,11 @@ class AristonGalevoDevice(AristonDevice):
         if value is None:
             return False
         try:
-            if float(value) in _MENU_ITEM_UNAVAILABLE_VALUES:
+            numeric_value = float(value)
+            unavailable_values = _MENU_ITEM_UNAVAILABLE_VALUES
+            if item.get("id") == MenuItemNames.CH_RETURN_TEMP.value:
+                unavailable_values = _CH_RETURN_TEMP_UNAVAILABLE_VALUES
+            if numeric_value in unavailable_values:
                 return False
         except (TypeError, ValueError):
             pass
