@@ -816,7 +816,11 @@ class AristonGalevoDevice(AristonDevice):
         if value is None:
             return False
         try:
-            if float(value) in _MENU_ITEM_UNAVAILABLE_VALUES:
+            numeric_value = float(value)
+            if numeric_value in _MENU_ITEM_UNAVAILABLE_VALUES or (
+                item.get("id") == MenuItemNames.CH_RETURN_TEMP.value
+                and numeric_value == 0.0
+            ):
                 return False
         except (TypeError, ValueError):
             pass
@@ -829,17 +833,7 @@ class AristonGalevoDevice(AristonDevice):
             return None
         if item_value == PropertyType.VALUE and not self._is_menu_item_available(item):
             return None
-        value = item.get(item_value)
-        if (
-            menu_item_id == MenuItemNames.CH_RETURN_TEMP.value
-            and item_value == PropertyType.VALUE
-        ):
-            try:
-                if float(value) == 0.0:
-                    return None
-            except (TypeError, ValueError):
-                pass
-        return value
+        return item.get(item_value)
 
     @property
     def elect_cost(self) -> Optional[float]:
