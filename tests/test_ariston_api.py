@@ -459,6 +459,112 @@ class AristonAPIRequestTests(unittest.TestCase):
             ],
         )
 
+    def test_sync_menu_items_cache_supported_ids_and_recover_on_500(self):
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+        requests = []
+        fail_combined = False
+
+        def get(path):
+            requested = path.split("menuItems=", 1)[1]
+            requests.append(requested)
+            if requested in ("123,125,115", "127"):
+                return []
+            if fail_combined and requested == "124,119,349,348,337,340,341":
+                raise ConnectionException(500)
+            return [{"id": int(item_id)} for item_id in requested.split(",")]
+
+        with patch.object(api, "_get", side_effect=get):
+            first = api.get_menu_items("gw-1", include_hybrid_items=True)
+            second = api.get_menu_items("gw-1", include_hybrid_items=True)
+            fail_combined = True
+            third = api.get_menu_items("gw-1", include_hybrid_items=True)
+
+        expected = [124, 119, 349, 348, 337, 340, 341]
+        self.assertEqual([item["id"] for item in first], expected)
+        self.assertEqual([item["id"] for item in second], expected)
+        self.assertEqual([item["id"] for item in third], expected)
+        self.assertEqual(
+            requests,
+            [
+                "124,119",
+                "123,125,115",
+                "349,348",
+                "337,340,341",
+                "127",
+                "124,119,349,348,337,340,341",
+                "124,119,349,348,337,340,341",
+                "124,119",
+                "123,125,115",
+                "349,348",
+                "337,340,341",
+                "127",
+            ],
+        )
+
+    def test_async_menu_items_cache_supported_ids_and_recover_on_500(self):
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+        requests = []
+        fail_combined = False
+
+        async def get(path):
+            requested = path.split("menuItems=", 1)[1]
+            requests.append(requested)
+            if requested in ("123,125,115", "127"):
+                return []
+            if fail_combined and requested == "124,119,349,348,337,340,341":
+                raise ConnectionException(500)
+            return [{"id": int(item_id)} for item_id in requested.split(",")]
+
+        async def exercise():
+            with patch.object(api, "_async_get", new=AsyncMock(side_effect=get)):
+                first = await api.async_get_menu_items("gw-1", include_hybrid_items=True)
+                second = await api.async_get_menu_items("gw-1", include_hybrid_items=True)
+                nonlocal fail_combined
+                fail_combined = True
+                third = await api.async_get_menu_items("gw-1", include_hybrid_items=True)
+                return first, second, third
+
+        first, second, third = asyncio.run(exercise())
+
+        expected = [124, 119, 349, 348, 337, 340, 341]
+        self.assertEqual([item["id"] for item in first], expected)
+        self.assertEqual([item["id"] for item in second], expected)
+        self.assertEqual([item["id"] for item in third], expected)
+        self.assertEqual(
+            requests,
+            [
+                "124,119",
+                "123,125,115",
+                "349,348",
+                "337,340,341",
+                "127",
+                "124,119,349,348,337,340,341",
+                "124,119,349,348,337,340,341",
+                "124,119",
+                "123,125,115",
+                "349,348",
+                "337,340,341",
+                "127",
+            ],
+        )
+
+    def test_async_menu_items_do_not_cache_partial_discovery_on_429(self):
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+
+        async def get(path):
+            requested = path.split("menuItems=", 1)[1]
+            if requested == "349,348":
+                raise ConnectionException(429, b"Requests are blocked")
+            return [{"id": int(item_id)} for item_id in requested.split(",")]
+
+        async def exercise():
+            with patch.object(api, "_async_get", new=AsyncMock(side_effect=get)):
+                await api.async_get_menu_items("gw-1", include_hybrid_items=True)
+
+        with self.assertRaises(ConnectionException):
+            asyncio.run(exercise())
+        self.assertNotIn("gw-1", api._hybrid_menu_items)
+
     def test_async_properties_recovers_from_batch_errors_with_small_requests(self):
         scenarios = (
             (

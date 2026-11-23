@@ -46,6 +46,9 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 _RATE_LIMIT_RE = re.compile(rb"blocked for (\d+) seconds", re.IGNORECASE)
+_UNPARSABLE_INITIAL_WAIT_SECONDS = 5
+_UNPARSABLE_COOLDOWN_BASE_SECONDS = 60
+_UNPARSABLE_COOLDOWN_MAX_SECONDS = 600
 
 
 def _parse_block_seconds(content: bytes) -> Optional[int]:
@@ -56,17 +59,50 @@ def _parse_block_seconds(content: bytes) -> Optional[int]:
     return int(match.group(1))
 
 
+def _parse_retry_after_seconds(headers: Any) -> Optional[int]:
+    """Extract an integer Retry-After delay in seconds from response headers."""
+    if not headers or not hasattr(headers, "get"):
+        return None
+    raw = headers.get("Retry-After")
+    if not isinstance(raw, str):
+        return None
+    raw = raw.strip()
+    if raw.isdigit():
+        return max(1, int(raw))
+    return None
+
+
 def _rate_limit_wait_seconds(content: bytes) -> int:
     """Effective wait for a 429: parsed duration + 1s margin, else 5s."""
     parsed = _parse_block_seconds(content)
     if parsed is None:
         _LOGGER.warning(
             "Rate limited (429) without parsable block duration; "
-            "falling back to 5s wait"
+            "falling back to %ss wait",
+            _UNPARSABLE_INITIAL_WAIT_SECONDS,
         )
-        return 5
+        return _UNPARSABLE_INITIAL_WAIT_SECONDS
     _LOGGER.warning("Rate limited (429) for %s seconds; waiting it out", parsed + 1)
     return parsed + 1
+
+
+def _collect_menu_item_ids(
+    items: list[Any], fallback_group: tuple[MenuItemNames, ...] | None = None
+) -> list[int]:
+    """Extract integer item IDs from a menu-items payload."""
+    found = [
+        item["id"]
+        for item in items
+        if isinstance(item, dict) and isinstance(item.get("id"), int)
+    ]
+    if found or not items or fallback_group is None:
+        return found
+    return [menu_item.value for menu_item in fallback_group]
+
+
+def _menu_items_path(api_url: str, gw_id: str, menu_items_query: str) -> str:
+    """Build the menuItems endpoint URL for a gateway and comma-joined IDs."""
+    return f"{api_url}{ARISTON_MENU_ITEMS}/{gw_id}?menuItems={menu_items_query}"
 
 
 class ConnectionException(Exception):
@@ -97,8 +133,47 @@ class AristonAPI:
         # API URLs must not silence each other; the three coordinators for
         # one account still share one API instance.
         self._blocked_until = 0.0
+        self._rate_limit_streak = 0
+        # Cached comma-separated menu item IDs per gateway once hybrid discovery succeeds.
+        self._hybrid_menu_items: dict[str, str] = {}
         # Sync (requests) R2 web-app session; created lazily on first use.
         self.__r2_requests_session: Optional[requests.Session] = None
+
+    def _prepare_rate_limit_retry(
+        self, content: bytes, headers: Any, is_retry: bool
+    ) -> Optional[int]:
+        """Update the rate-limit window; return sleep seconds if a retry should run."""
+        parsed = _parse_block_seconds(content)
+        if parsed is None:
+            parsed = _parse_retry_after_seconds(headers)
+
+        if parsed is not None:
+            wait_seconds = parsed + 1
+            _LOGGER.warning(
+                "Rate limited (429) for %s seconds; waiting it out", wait_seconds
+            )
+            self._blocked_until = max(self._blocked_until, time.time() + wait_seconds)
+            return None if is_retry else wait_seconds
+
+        if not is_retry and self._rate_limit_streak == 0:
+            wait_seconds = _rate_limit_wait_seconds(content)
+            self._blocked_until = max(self._blocked_until, time.time() + wait_seconds)
+            return wait_seconds
+
+        self._rate_limit_streak += 1
+        cooldown = min(
+            _UNPARSABLE_COOLDOWN_MAX_SECONDS,
+            _UNPARSABLE_COOLDOWN_BASE_SECONDS
+            * (2 ** min(self._rate_limit_streak - 1, 4)),
+        )
+        _LOGGER.warning(
+            "Rate limited (429) without parsable block duration (streak %s); "
+            "cooling down for %s seconds",
+            self._rate_limit_streak,
+            cooldown,
+        )
+        self._blocked_until = max(self._blocked_until, time.time() + cooldown)
+        return None
 
     def _r2_cookies(self) -> aiohttp.CookieJar:
         """Lazily create the R2 cookie jar (requires a running loop)."""
@@ -248,33 +323,62 @@ class AristonAPI:
             return settings
         return {}
 
+    @staticmethod
+    def _build_hybrid_menu_query(
+        core_items: list[Any], discovered_ids: list[int]
+    ) -> str:
+        """Build a deduplicated comma-separated query preserving core menu items."""
+        core_ids = [
+            int(item_id) for item_id in MenuItemNames.core_values().split(",")
+        ]
+        ordered = list(
+            dict.fromkeys(
+                [*core_ids, *_collect_menu_item_ids(core_items), *discovered_ids]
+            )
+        )
+        return ",".join(str(item_id) for item_id in ordered)
+
     def get_menu_items(
         self, gw_id: str, include_hybrid_items: bool = False
     ) -> list[dict[str, Any]]:
         """Get core menu items and, when requested, optional hybrid values."""
+        if include_hybrid_items:
+            cached_query = self._hybrid_menu_items.get(gw_id)
+            if cached_query is not None:
+                try:
+                    cached_items = self._get(
+                        _menu_items_path(self.__api_url, gw_id, cached_query)
+                    )
+                except ConnectionException as error:
+                    if error.args[:1] != (500,):
+                        raise
+                    self._hybrid_menu_items.pop(gw_id, None)
+                else:
+                    return cached_items or []
+
         items = self._get(
-            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
-            f"?menuItems={MenuItemNames.core_values()}"
+            _menu_items_path(self.__api_url, gw_id, MenuItemNames.core_values())
         )
         if items is None or not include_hybrid_items:
             return items or []
 
+        core_snapshot = list(items)
+        discovered_ids: list[int] = []
         for group in MenuItemNames.hybrid_groups():
-            group_ids = ",".join(str(item.value) for item in group)
-            path = (
-                f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
-                f"?menuItems={group_ids}"
+            path = _menu_items_path(
+                self.__api_url, gw_id, ",".join(str(item.value) for item in group)
             )
             try:
                 additional_items = self._get(path)
+                group_ids = _collect_menu_item_ids(additional_items or [], group)
             except ConnectionException as error:
                 if error.args[:1] != (500,):
                     raise
                 additional_items = []
+                group_ids = []
                 for menu_item in group:
-                    item_path = (
-                        f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
-                        f"?menuItems={menu_item.value}"
+                    item_path = _menu_items_path(
+                        self.__api_url, gw_id, str(menu_item.value)
                     )
                     try:
                         item_response = self._get(item_path)
@@ -288,8 +392,16 @@ class AristonAPI:
                         continue
                     if item_response:
                         additional_items.extend(item_response)
+                        group_ids.extend(
+                            _collect_menu_item_ids(item_response, (menu_item,))
+                        )
             if additional_items:
                 items.extend(additional_items)
+                discovered_ids.extend(group_ids)
+
+        self._hybrid_menu_items[gw_id] = self._build_hybrid_menu_query(
+            core_snapshot, discovered_ids
+        )
         return items
 
     def set_property(
@@ -606,6 +718,7 @@ class AristonAPI:
                         return self.__request(method, path, params, body, True)
                     raise ConnectionException(response.status_code)
 
+        self._rate_limit_streak = 0
         if len(response.content) > 0:
             json = response.json()
             _LOGGER.debug("Response %s", json)
@@ -628,11 +741,16 @@ class AristonAPI:
     ) -> Optional[dict[str, Any]]:
         """Sleep out the 429 block window, retry once, per-instance deadline."""
         content = response.content
-        wait_seconds = _rate_limit_wait_seconds(content)
-        self._blocked_until = time.time() + wait_seconds
-        if not is_retry:
+        headers = getattr(response, "headers", None)
+        wait_seconds = self._prepare_rate_limit_retry(content, headers, is_retry)
+        if wait_seconds is not None:
+            sleep_deadline = time.time() + wait_seconds
             time.sleep(wait_seconds)
-            return self.__request(method, path, params, body, True)
+            if (
+                self._rate_limit_streak == 0
+                and self._blocked_until <= sleep_deadline + 0.5
+            ):
+                return self.__request(method, path, params, body, True)
         raise ConnectionException(response.status_code, content.decode())
 
     def _get(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
@@ -1000,29 +1118,43 @@ class AristonAPI:
         self, gw_id: str, include_hybrid_items: bool = False
     ) -> list[dict[str, Any]]:
         """Async get core menu items and optional hybrid values."""
+        if include_hybrid_items:
+            cached_query = self._hybrid_menu_items.get(gw_id)
+            if cached_query is not None:
+                try:
+                    cached_items = await self._async_get(
+                        _menu_items_path(self.__api_url, gw_id, cached_query)
+                    )
+                except ConnectionException as error:
+                    if error.args[:1] != (500,):
+                        raise
+                    self._hybrid_menu_items.pop(gw_id, None)
+                else:
+                    return cached_items or []
+
         items = await self._async_get(
-            f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
-            f"?menuItems={MenuItemNames.core_values()}"
+            _menu_items_path(self.__api_url, gw_id, MenuItemNames.core_values())
         )
         if items is None or not include_hybrid_items:
             return items or []
 
+        core_snapshot = list(items)
+        discovered_ids: list[int] = []
         for group in MenuItemNames.hybrid_groups():
-            group_ids = ",".join(str(item.value) for item in group)
-            path = (
-                f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
-                f"?menuItems={group_ids}"
+            path = _menu_items_path(
+                self.__api_url, gw_id, ",".join(str(item.value) for item in group)
             )
             try:
                 additional_items = await self._async_get(path)
+                group_ids = _collect_menu_item_ids(additional_items or [], group)
             except ConnectionException as error:
                 if error.args[:1] != (500,):
                     raise
                 additional_items = []
+                group_ids = []
                 for menu_item in group:
-                    item_path = (
-                        f"{self.__api_url}{ARISTON_MENU_ITEMS}/{gw_id}"
-                        f"?menuItems={menu_item.value}"
+                    item_path = _menu_items_path(
+                        self.__api_url, gw_id, str(menu_item.value)
                     )
                     try:
                         item_response = await self._async_get(item_path)
@@ -1036,8 +1168,16 @@ class AristonAPI:
                         continue
                     if item_response:
                         additional_items.extend(item_response)
+                        group_ids.extend(
+                            _collect_menu_item_ids(item_response, (menu_item,))
+                        )
             if additional_items:
                 items.extend(additional_items)
+                discovered_ids.extend(group_ids)
+
+        self._hybrid_menu_items[gw_id] = self._build_hybrid_menu_query(
+            core_snapshot, discovered_ids
+        )
         return items
 
     async def async_set_property(
@@ -1513,6 +1653,7 @@ class AristonAPI:
                             )
                         raise ConnectionException(response.status)
 
+            self._rate_limit_streak = 0
             if response.content_length and response.content_length > 0:
                 json = await response.json()
                 _LOGGER.debug("Response %s", json)
@@ -1540,13 +1681,18 @@ class AristonAPI:
     ) -> Optional[dict[str, Any]]:
         """Sleep out the 429 block window, retry once, share the deadline."""
         content = await response.content.read()
-        wait_seconds = _rate_limit_wait_seconds(content)
-        self._blocked_until = time.time() + wait_seconds
-        if not is_retry:
+        headers = getattr(response, "headers", None)
+        wait_seconds = self._prepare_rate_limit_retry(content, headers, is_retry)
+        if wait_seconds is not None:
+            sleep_deadline = time.time() + wait_seconds
             await asyncio.sleep(wait_seconds)
-            return await self.__async_request(
-                method, path, params, body, True, timeout_seconds
-            )
+            if (
+                self._rate_limit_streak == 0
+                and self._blocked_until <= sleep_deadline + 0.5
+            ):
+                return await self.__async_request(
+                    method, path, params, body, True, timeout_seconds
+                )
         raise ConnectionException(response.status, content)
 
     async def _async_get(

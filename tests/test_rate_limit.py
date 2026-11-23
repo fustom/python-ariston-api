@@ -221,6 +221,71 @@ class RateLimitTests(unittest.TestCase):
         self.assertGreater(blocked._blocked_until, 0)
         self.assertEqual(other._blocked_until, 0.0)  # untouched by the 429
 
+    def test_429_without_duration_escalates_cooldown_and_resets_on_ok(self):
+        api = _api()
+        body = b"Requests are blocked"
+        http = MagicMock(
+            side_effect=[
+                _sync_response(429, body),
+                _sync_response(429, body),
+                _sync_response(429, body),
+                _sync_response(200, b"{}", {"ok": True}),
+            ]
+        )
+        sleeps: list[int] = []
+        with patch("ariston.ariston_api.requests.request", http), patch(
+            "ariston.ariston_api.time.sleep", side_effect=sleeps.append
+        ):
+            with self.assertRaises(ConnectionException):
+                api._get("https://example/api")
+            first_cooldown = api._blocked_until - time.time()
+            self.assertGreater(first_cooldown, 50)
+            self.assertEqual(api._rate_limit_streak, 1)
+            self.assertEqual(sleeps, [5])
+
+            api._blocked_until = 0.0
+            with self.assertRaises(ConnectionException):
+                api._get("https://example/api")
+            second_cooldown = api._blocked_until - time.time()
+            self.assertGreater(second_cooldown, 110)
+            self.assertEqual(api._rate_limit_streak, 2)
+            self.assertEqual(sleeps, [5])
+
+            api._blocked_until = 0.0
+            self.assertEqual(api._get("https://example/api"), {"ok": True})
+            self.assertEqual(api._rate_limit_streak, 0)
+
+    def test_async_429_without_duration_sets_cooldown_and_retry_after_header(self):
+        api = _api()
+        resp_with_header = _FakeAiohttpResponse(429, b"Requests are blocked")
+        resp_with_header.headers = {"Retry-After": "12"}
+        responses = [
+            resp_with_header,
+            _FakeAiohttpResponse(200, b"{}", {"ok": True}),
+            _FakeAiohttpResponse(429, b"Requests are blocked"),
+            _FakeAiohttpResponse(429, b"Requests are blocked"),
+        ]
+        calls: list[int] = []
+        sleeps: list[int] = []
+
+        async def run():
+            with patch(
+                "ariston.ariston_api.aiohttp.ClientSession",
+                _fake_session_cls(responses, calls),
+            ), patch(
+                "ariston.ariston_api.asyncio.sleep", side_effect=sleeps.append
+            ):
+                ok = await api._async_get("https://example/api")
+                api._blocked_until = 0.0
+                with self.assertRaises(ConnectionException):
+                    await api._async_get("https://example/api")
+                return ok
+
+        self.assertEqual(asyncio.run(run()), {"ok": True})
+        self.assertEqual(sleeps, [13, 5])
+        self.assertEqual(api._rate_limit_streak, 1)
+        self.assertGreater(api._blocked_until - time.time(), 50)
+
 
 if __name__ == "__main__":
     unittest.main()
