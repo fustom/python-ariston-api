@@ -6,7 +6,7 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from ariston.ariston_api import AristonAPI
+from ariston.ariston_api import AristonAPI, ConnectionException
 from ariston.const import NuosSplitOperativeMode, NuosSplitPlantMode
 from ariston.nuos_split_device import AristonNuosSplitDevice
 
@@ -109,9 +109,56 @@ class NuosPlantModeTests(unittest.TestCase):
         api._r2_login = MagicMock()  # type: ignore[method-assign]
         api._r2_get_slp_plant_data = MagicMock(return_value=PLANT)  # type: ignore[method-assign]
         api._r2_post_set_data = MagicMock()  # type: ignore[method-assign]
-        api.set_nuos_plant_mode_via_r2("gw-1", NuosSplitPlantMode.MANUAL)
+        api.set_nuos_plant_mode_via_r2("gw-1", NuosSplitPlantMode.PROGRAM)
+        api._r2_post_set_data.assert_called_once()
         gw, payload = api._r2_post_set_data.call_args.args
-        self.assertEqual(payload["viewModel"]["plantMode"], 1)
+        self.assertEqual(gw, "gw-1")
+        self.assertEqual(payload["viewModel"]["plantMode"], 2)
+        self.assertEqual(payload["viewModel"]["opMode"], 1)
+
+    def test_api_sync_retry_after_failed_read(self) -> None:
+        """A failed read triggers one fresh login, a reread, then one POST."""
+        fresh = dict(PLANT, opMode=3, comfortTemp=60.0)
+        api = AristonAPI("user", "pass")
+        api._r2_login = MagicMock()  # type: ignore[method-assign]
+        api._r2_get_slp_plant_data = MagicMock(  # type: ignore[method-assign]
+            side_effect=[ConnectionException("expired"), fresh]
+        )
+        api._r2_post_set_data = MagicMock()  # type: ignore[method-assign]
+
+        api.set_nuos_plant_mode_via_r2("gw-1", NuosSplitPlantMode.PROGRAM)
+
+        self.assertEqual(api._r2_login.call_count, 2)  # initial + retry
+        self.assertEqual(api._r2_get_slp_plant_data.call_count, 2)
+        api._r2_post_set_data.assert_called_once()
+        gw, payload = api._r2_post_set_data.call_args.args
+        self.assertEqual(gw, "gw-1")
+        self.assertEqual(payload["viewModel"]["plantMode"], 2)
+        self.assertEqual(payload["viewModel"]["opMode"], 3)  # fresh values
+        self.assertEqual(payload["viewModel"]["comfortTemp"], 60.0)
+
+    def test_api_async_retry_after_failed_read(self) -> None:
+        """Async: a failed read triggers one fresh login, a reread, one POST."""
+        fresh = dict(PLANT, opMode=3, comfortTemp=60.0)
+        api = AristonAPI("user", "pass")
+        api._async_r2_login = AsyncMock()  # type: ignore[method-assign]
+        api._async_r2_get_slp_plant_data = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[ConnectionException("expired"), fresh]
+        )
+        api._async_r2_post_set_data = AsyncMock()  # type: ignore[method-assign]
+
+        asyncio.run(
+            api.async_set_nuos_plant_mode_via_r2("gw-1", NuosSplitPlantMode.PROGRAM)
+        )
+
+        self.assertEqual(api._async_r2_login.await_count, 2)  # initial + retry
+        self.assertEqual(api._async_r2_get_slp_plant_data.await_count, 2)
+        api._async_r2_post_set_data.assert_awaited_once()
+        gw, payload = api._async_r2_post_set_data.await_args.args
+        self.assertEqual(gw, "gw-1")
+        self.assertEqual(payload["viewModel"]["plantMode"], 2)
+        self.assertEqual(payload["viewModel"]["opMode"], 3)  # fresh values
+        self.assertEqual(payload["viewModel"]["comfortTemp"], 60.0)
 
 
 if __name__ == "__main__":
