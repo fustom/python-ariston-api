@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 import time
 from typing import Any, Optional
@@ -46,9 +47,11 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 _RATE_LIMIT_RE = re.compile(rb"blocked for (\d+) seconds", re.IGNORECASE)
+_RATE_LIMIT_WAIT_LOG = "Rate limited (429) for %s seconds; waiting it out"
 _UNPARSABLE_INITIAL_WAIT_SECONDS = 5
 _UNPARSABLE_COOLDOWN_BASE_SECONDS = 60
 _UNPARSABLE_COOLDOWN_MAX_SECONDS = 600
+_INCOMPLETE_MENU_CACHE_TTL_SECONDS = 3600
 
 
 def _parse_block_seconds(content: bytes) -> Optional[int]:
@@ -82,8 +85,43 @@ def _rate_limit_wait_seconds(content: bytes) -> int:
             _UNPARSABLE_INITIAL_WAIT_SECONDS,
         )
         return _UNPARSABLE_INITIAL_WAIT_SECONDS
-    _LOGGER.warning("Rate limited (429) for %s seconds; waiting it out", parsed + 1)
+    _LOGGER.warning(_RATE_LIMIT_WAIT_LOG, parsed + 1)
     return parsed + 1
+
+
+def _raise_unless_http_500(error: ConnectionException) -> None:
+    """Re-raise ConnectionException unless its status code is HTTP 500."""
+    if error.args[:1] != (500,):
+        raise error
+
+
+def _record_menu_item_response(
+    additional_items: list[dict[str, Any]],
+    group_ids: list[int],
+    group_queries: list[str],
+    menu_item: MenuItemNames,
+    item_response: list[dict[str, Any]] | None,
+) -> None:
+    """Collect a single split menu-item payload into the current group results."""
+    if item_response:
+        additional_items.extend(item_response)
+        group_ids.extend(_collect_menu_item_ids(item_response, (menu_item,)))
+        group_queries.append(str(menu_item.value))
+
+
+def _record_menu_group_result(
+    items: list[dict[str, Any]],
+    discovered_ids: list[int],
+    working_queries: list[str],
+    additional_items: list[dict[str, Any]],
+    group_ids: list[int],
+    group_queries: list[str],
+) -> None:
+    """Append discovered menu-group items and queries when non-empty."""
+    if additional_items:
+        items.extend(additional_items)
+        discovered_ids.extend(group_ids)
+        working_queries.extend(group_queries)
 
 
 def _collect_menu_item_ids(
@@ -138,6 +176,8 @@ class AristonAPI:
         self._rate_limit_retry_in_flight = False
         # Cached menu item query strings per gateway once hybrid discovery succeeds.
         self._hybrid_menu_items: dict[str, tuple[str, ...]] = {}
+        self._hybrid_menu_grouped_mode: set[str] = set()
+        self._hybrid_menu_items_expires_at: dict[str, float] = {}
         # Sync (requests) R2 web-app session; created lazily on first use.
         self.__r2_requests_session: Optional[requests.Session] = None
 
@@ -159,8 +199,9 @@ class AristonAPI:
 
     def _prepare_rate_limit_retry(
         self, content: bytes, headers: Any, is_retry: bool
-    ) -> Optional[tuple[int, float, int]]:
-        """Update rate-limit state; return (wait_seconds, deadline, epoch) to retry."""
+    ) -> Optional[tuple[int, float, int, float]]:
+        """Update rate-limit state; return (wait, deadline, epoch, started_at) to retry."""
+        now = time.time()
         parsed = _parse_block_seconds(content)
         if parsed is None:
             parsed = _parse_retry_after_seconds(headers)
@@ -168,12 +209,8 @@ class AristonAPI:
         if is_retry:
             if parsed is not None:
                 wait_seconds = parsed + 1
-                _LOGGER.warning(
-                    "Rate limited (429) for %s seconds; waiting it out", wait_seconds
-                )
-                self._blocked_until = max(
-                    self._blocked_until, time.time() + wait_seconds
-                )
+                _LOGGER.warning(_RATE_LIMIT_WAIT_LOG, wait_seconds)
+                self._blocked_until = max(self._blocked_until, now + wait_seconds)
             else:
                 self._bump_rate_limit_cooldown()
             return None
@@ -181,30 +218,32 @@ class AristonAPI:
         if self._rate_limit_retry_in_flight:
             return None
 
+        wait_seconds: Optional[int] = None
         if parsed is not None:
             wait_seconds = parsed + 1
-            _LOGGER.warning(
-                "Rate limited (429) for %s seconds; waiting it out", wait_seconds
-            )
-            deadline = max(self._blocked_until, time.time() + wait_seconds)
-            self._blocked_until = deadline
-            return (wait_seconds, deadline, self._rate_limit_retry_epoch)
-
-        if self._rate_limit_streak == 0:
+            _LOGGER.warning(_RATE_LIMIT_WAIT_LOG, wait_seconds)
+        elif self._rate_limit_streak == 0:
             wait_seconds = _rate_limit_wait_seconds(content)
-            deadline = max(self._blocked_until, time.time() + wait_seconds)
-            self._blocked_until = deadline
-            return (wait_seconds, deadline, self._rate_limit_retry_epoch)
 
-        self._bump_rate_limit_cooldown()
-        return None
+        if wait_seconds is None:
+            self._bump_rate_limit_cooldown()
+            return None
 
-    def _claim_rate_limit_retry(self, scheduled_until: float, epoch: int) -> bool:
-        """Claim the single post-sleep retry unless superseded during the wait."""
+        deadline = max(self._blocked_until, now + wait_seconds)
+        self._blocked_until = deadline
+        effective_wait = max(wait_seconds, int(math.ceil(deadline - now - 1e-6)))
+        return (effective_wait, deadline, self._rate_limit_retry_epoch, now)
+
+    def _claim_rate_limit_retry(
+        self, scheduled_until: float, epoch: int, sleep_started_at: float
+    ) -> bool:
+        """Claim the single post-sleep retry once the shared deadline has elapsed."""
+        now = time.time()
         if (
             self._rate_limit_retry_in_flight
             or self._rate_limit_retry_epoch != epoch
             or self._blocked_until > scheduled_until + 0.5
+            or (now - sleep_started_at >= 0.5 and now < self._blocked_until)
         ):
             return False
         self._rate_limit_retry_epoch += 1
@@ -374,18 +413,30 @@ class AristonAPI:
         )
         return ",".join(str(item_id) for item_id in ordered)
 
+    def _get_cached_menu_queries(
+        self, gw_id: str, include_hybrid_items: bool
+    ) -> Optional[tuple[str, ...]]:
+        """Return unexpired cached menu-item queries for a gateway, if any."""
+        if not include_hybrid_items:
+            return None
+        expires_at = self._hybrid_menu_items_expires_at.get(gw_id)
+        if expires_at is not None and time.time() >= expires_at:
+            self._hybrid_menu_items.pop(gw_id, None)
+            self._hybrid_menu_items_expires_at.pop(gw_id, None)
+            return None
+        return self._hybrid_menu_items.get(gw_id)
+
     def _handle_cached_menu_error(
-        self,
-        gw_id: str,
-        cached_queries: tuple[str, ...],
-        error: ConnectionException,
-    ) -> bool:
-        """Invalidate cached menu queries on 500/550; return True if combined failed."""
+        self, gw_id: str, error: ConnectionException
+    ) -> None:
+        """Invalidate cached menu queries on 500/550 and lock grouped mode if needed."""
         status = error.args[0] if error.args else None
         if status not in (500, 550):
             raise error
-        self._hybrid_menu_items.pop(gw_id, None)
-        return len(cached_queries) == 1
+        cached = self._hybrid_menu_items.pop(gw_id, None)
+        self._hybrid_menu_items_expires_at.pop(gw_id, None)
+        if cached is not None and len(cached) == 1:
+            self._hybrid_menu_grouped_mode.add(gw_id)
 
     def _store_discovered_menu_items(
         self,
@@ -393,36 +444,38 @@ class AristonAPI:
         core_items: list[Any],
         discovered_ids: list[int],
         working_queries: list[str],
-        prefer_grouped: bool,
+        incomplete: bool,
     ) -> None:
-        """Persist either a combined single query or the smaller working group queries."""
-        if prefer_grouped:
+        """Persist menu queries and set TTL when any item had a transient 500."""
+        if gw_id in self._hybrid_menu_grouped_mode:
             self._hybrid_menu_items[gw_id] = tuple(dict.fromkeys(working_queries))
         else:
             self._hybrid_menu_items[gw_id] = (
                 self._build_hybrid_menu_query(core_items, discovered_ids),
             )
+        if incomplete:
+            self._hybrid_menu_items_expires_at[gw_id] = (
+                time.time() + _INCOMPLETE_MENU_CACHE_TTL_SECONDS
+            )
+        else:
+            self._hybrid_menu_items_expires_at.pop(gw_id, None)
 
     def get_menu_items(
         self, gw_id: str, include_hybrid_items: bool = False
     ) -> list[dict[str, Any]]:
         """Get core menu items and, when requested, optional hybrid values."""
-        prefer_grouped = False
-        if include_hybrid_items:
-            cached_queries = self._hybrid_menu_items.get(gw_id)
-            if cached_queries is not None:
-                try:
-                    cached_items: list[dict[str, Any]] = []
-                    for query in cached_queries:
-                        part = self._get(_menu_items_path(self.__api_url, gw_id, query))
-                        if part:
-                            cached_items.extend(part)
-                except ConnectionException as error:
-                    prefer_grouped = self._handle_cached_menu_error(
-                        gw_id, cached_queries, error
-                    )
-                else:
-                    return cached_items
+        cached_queries = self._get_cached_menu_queries(gw_id, include_hybrid_items)
+        if cached_queries is not None:
+            try:
+                cached_items: list[dict[str, Any]] = []
+                for query in cached_queries:
+                    part = self._get(_menu_items_path(self.__api_url, gw_id, query))
+                    if part:
+                        cached_items.extend(part)
+            except ConnectionException as error:
+                self._handle_cached_menu_error(gw_id, error)
+            else:
+                return cached_items
 
         core_query = MenuItemNames.core_values()
         items = self._get(_menu_items_path(self.__api_url, gw_id, core_query))
@@ -432,45 +485,41 @@ class AristonAPI:
         core_snapshot = list(items)
         discovered_ids: list[int] = []
         working_queries: list[str] = [core_query]
+        incomplete = False
         for group in MenuItemNames.hybrid_groups():
             group_query = ",".join(str(item.value) for item in group)
-            path = _menu_items_path(self.__api_url, gw_id, group_query)
             try:
-                additional_items = self._get(path)
+                additional_items = self._get(
+                    _menu_items_path(self.__api_url, gw_id, group_query)
+                )
                 group_ids = _collect_menu_item_ids(additional_items or [], group)
                 group_queries = [group_query] if additional_items else []
             except ConnectionException as error:
-                if error.args[:1] != (500,):
-                    raise
-                additional_items = []
-                group_ids = []
-                group_queries = []
+                _raise_unless_http_500(error)
+                additional_items, group_ids, group_queries = [], [], []
                 for menu_item in group:
-                    item_query = str(menu_item.value)
-                    item_path = _menu_items_path(self.__api_url, gw_id, item_query)
+                    item_path = _menu_items_path(
+                        self.__api_url, gw_id, str(menu_item.value)
+                    )
                     try:
                         item_response = self._get(item_path)
                     except ConnectionException as item_error:
-                        if item_error.args[:1] != (500,):
-                            raise
+                        _raise_unless_http_500(item_error)
+                        incomplete = True
                         _LOGGER.debug(
                             "Skipping unsupported GALEVO menu item %s",
                             menu_item.value,
                         )
                         continue
-                    if item_response:
-                        additional_items.extend(item_response)
-                        group_ids.extend(
-                            _collect_menu_item_ids(item_response, (menu_item,))
-                        )
-                        group_queries.append(item_query)
-            if additional_items:
-                items.extend(additional_items)
-                discovered_ids.extend(group_ids)
-                working_queries.extend(group_queries)
+                    _record_menu_item_response(
+                        additional_items, group_ids, group_queries, menu_item, item_response
+                    )
+            _record_menu_group_result(
+                items, discovered_ids, working_queries, additional_items, group_ids, group_queries
+            )
 
         self._store_discovered_menu_items(
-            gw_id, core_snapshot, discovered_ids, working_queries, prefer_grouped
+            gw_id, core_snapshot, discovered_ids, working_queries, incomplete
         )
         return items
 
@@ -814,9 +863,9 @@ class AristonAPI:
         headers = getattr(response, "headers", None)
         retry_plan = self._prepare_rate_limit_retry(content, headers, is_retry)
         if retry_plan is not None:
-            wait_seconds, scheduled_until, epoch = retry_plan
+            wait_seconds, scheduled_until, epoch, sleep_started_at = retry_plan
             time.sleep(wait_seconds)
-            if self._claim_rate_limit_retry(scheduled_until, epoch):
+            if self._claim_rate_limit_retry(scheduled_until, epoch, sleep_started_at):
                 try:
                     return self.__request(method, path, params, body, True)
                 finally:
@@ -1188,24 +1237,20 @@ class AristonAPI:
         self, gw_id: str, include_hybrid_items: bool = False
     ) -> list[dict[str, Any]]:
         """Async get core menu items and optional hybrid values."""
-        prefer_grouped = False
-        if include_hybrid_items:
-            cached_queries = self._hybrid_menu_items.get(gw_id)
-            if cached_queries is not None:
-                try:
-                    cached_items: list[dict[str, Any]] = []
-                    for query in cached_queries:
-                        part = await self._async_get(
-                            _menu_items_path(self.__api_url, gw_id, query)
-                        )
-                        if part:
-                            cached_items.extend(part)
-                except ConnectionException as error:
-                    prefer_grouped = self._handle_cached_menu_error(
-                        gw_id, cached_queries, error
+        cached_queries = self._get_cached_menu_queries(gw_id, include_hybrid_items)
+        if cached_queries is not None:
+            try:
+                cached_items: list[dict[str, Any]] = []
+                for query in cached_queries:
+                    part = await self._async_get(
+                        _menu_items_path(self.__api_url, gw_id, query)
                     )
-                else:
-                    return cached_items
+                    if part:
+                        cached_items.extend(part)
+            except ConnectionException as error:
+                self._handle_cached_menu_error(gw_id, error)
+            else:
+                return cached_items
 
         core_query = MenuItemNames.core_values()
         items = await self._async_get(_menu_items_path(self.__api_url, gw_id, core_query))
@@ -1215,45 +1260,41 @@ class AristonAPI:
         core_snapshot = list(items)
         discovered_ids: list[int] = []
         working_queries: list[str] = [core_query]
+        incomplete = False
         for group in MenuItemNames.hybrid_groups():
             group_query = ",".join(str(item.value) for item in group)
-            path = _menu_items_path(self.__api_url, gw_id, group_query)
             try:
-                additional_items = await self._async_get(path)
+                additional_items = await self._async_get(
+                    _menu_items_path(self.__api_url, gw_id, group_query)
+                )
                 group_ids = _collect_menu_item_ids(additional_items or [], group)
                 group_queries = [group_query] if additional_items else []
             except ConnectionException as error:
-                if error.args[:1] != (500,):
-                    raise
-                additional_items = []
-                group_ids = []
-                group_queries = []
+                _raise_unless_http_500(error)
+                additional_items, group_ids, group_queries = [], [], []
                 for menu_item in group:
-                    item_query = str(menu_item.value)
-                    item_path = _menu_items_path(self.__api_url, gw_id, item_query)
+                    item_path = _menu_items_path(
+                        self.__api_url, gw_id, str(menu_item.value)
+                    )
                     try:
                         item_response = await self._async_get(item_path)
                     except ConnectionException as item_error:
-                        if item_error.args[:1] != (500,):
-                            raise
+                        _raise_unless_http_500(item_error)
+                        incomplete = True
                         _LOGGER.debug(
                             "Skipping unsupported GALEVO menu item %s",
                             menu_item.value,
                         )
                         continue
-                    if item_response:
-                        additional_items.extend(item_response)
-                        group_ids.extend(
-                            _collect_menu_item_ids(item_response, (menu_item,))
-                        )
-                        group_queries.append(item_query)
-            if additional_items:
-                items.extend(additional_items)
-                discovered_ids.extend(group_ids)
-                working_queries.extend(group_queries)
+                    _record_menu_item_response(
+                        additional_items, group_ids, group_queries, menu_item, item_response
+                    )
+            _record_menu_group_result(
+                items, discovered_ids, working_queries, additional_items, group_ids, group_queries
+            )
 
         self._store_discovered_menu_items(
-            gw_id, core_snapshot, discovered_ids, working_queries, prefer_grouped
+            gw_id, core_snapshot, discovered_ids, working_queries, incomplete
         )
         return items
 
@@ -1761,9 +1802,9 @@ class AristonAPI:
         headers = getattr(response, "headers", None)
         retry_plan = self._prepare_rate_limit_retry(content, headers, is_retry)
         if retry_plan is not None:
-            wait_seconds, scheduled_until, epoch = retry_plan
+            wait_seconds, scheduled_until, epoch, sleep_started_at = retry_plan
             await asyncio.sleep(wait_seconds)
-            if self._claim_rate_limit_retry(scheduled_until, epoch):
+            if self._claim_rate_limit_retry(scheduled_until, epoch, sleep_started_at):
                 try:
                     return await self.__async_request(
                         method, path, params, body, True, timeout_seconds

@@ -297,21 +297,6 @@ class RateLimitTests(unittest.TestCase):
         sleeps: list[int] = []
         real_sleep = asyncio.sleep
 
-        class _OverlappingSession:
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                pass
-
-            async def __aenter__(self) -> "_OverlappingSession":
-                return self
-
-            async def __aexit__(self, *exc: Any) -> bool:
-                return False
-
-            async def request(self, *args: Any, **kwargs: Any):
-                calls.append(1)
-                await real_sleep(0)
-                return responses.pop(0)
-
         async def fake_sleep(seconds: int) -> None:
             sleeps.append(seconds)
             await real_sleep(0)
@@ -319,7 +304,7 @@ class RateLimitTests(unittest.TestCase):
         async def run():
             with patch(
                 "ariston.ariston_api.aiohttp.ClientSession",
-                _OverlappingSession,
+                self._overlapping_session_cls(responses, calls, real_sleep),
             ), patch("ariston.ariston_api.asyncio.sleep", side_effect=fake_sleep):
                 return await asyncio.gather(
                     api._async_get("https://example/api/a"),
@@ -332,6 +317,25 @@ class RateLimitTests(unittest.TestCase):
         self.assertEqual(sleeps, [5, 5])
         self.assertEqual(api._rate_limit_streak, 1)
         self.assertTrue(all(isinstance(res, ConnectionException) for res in results))
+
+    @staticmethod
+    def _overlapping_session_cls(responses: list, calls: list, real_sleep: Any):
+        class _Session:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                pass
+
+            async def __aenter__(self) -> "_Session":
+                return self
+
+            async def __aexit__(self, *exc: Any) -> bool:
+                return False
+
+            async def request(self, *args: Any, **kwargs: Any):
+                calls.append(1)
+                await real_sleep(0)
+                return responses.pop(0)
+
+        return _Session
 
     def test_retry_after_still_retries_when_streak_is_nonzero(self):
         for is_async in (False, True):
@@ -366,9 +370,58 @@ class RateLimitTests(unittest.TestCase):
                     result = asyncio.run(run_async())
                     self.assertEqual(len(calls), 2)
 
-                self.assertEqual(result, {"ok": True})
-                self.assertEqual(sleeps, [9])
-                self.assertEqual(api._rate_limit_streak, 0)
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(sleeps, [9])
+        self.assertEqual(api._rate_limit_streak, 0)
+
+    def test_async_overlapping_429_respects_longest_shared_deadline(self):
+        real_sleep = asyncio.sleep
+        for order in ("long_first", "short_first"):
+            with self.subTest(order=order):
+                api = _api()
+                r_long = _FakeAiohttpResponse(429, b"Requests are blocked")
+                r_long.headers = {"Retry-After": "60"}
+                r_short = _FakeAiohttpResponse(429, b"Requests are blocked")
+                r_short.headers = {"Retry-After": "1"}
+                responses = (
+                    [r_long, r_short, _FakeAiohttpResponse(200, b"{}", {"ok": True})]
+                    if order == "long_first"
+                    else [r_short, r_long, _FakeAiohttpResponse(200, b"{}", {"ok": True})]
+                )
+                calls: list[int] = []
+                sleeps: list[int] = []
+                clock = [1000.0]
+
+                async def fake_sleep(seconds: int) -> None:
+                    sleeps.append(seconds)
+                    await real_sleep(0)
+                    clock[0] += seconds
+
+                async def run():
+                    with patch(
+                        "ariston.ariston_api.aiohttp.ClientSession",
+                        self._overlapping_session_cls(responses, calls, real_sleep),
+                    ), patch(
+                        "ariston.ariston_api.asyncio.sleep", side_effect=fake_sleep
+                    ), patch(
+                        "ariston.ariston_api.time.time", side_effect=lambda: clock[0]
+                    ):
+                        return await asyncio.gather(
+                            api._async_get("https://example/api/a"),
+                            api._async_get("https://example/api/b"),
+                            return_exceptions=True,
+                        )
+
+                results = asyncio.run(run())
+                self.assertEqual(len(calls), 3)
+                if order == "long_first":
+                    self.assertEqual(sleeps, [61, 61])
+                    self.assertEqual(results[0], {"ok": True})
+                    self.assertIsInstance(results[1], ConnectionException)
+                else:
+                    self.assertEqual(sleeps, [2, 61])
+                    self.assertIsInstance(results[0], ConnectionException)
+                    self.assertEqual(results[1], {"ok": True})
 
 
 if __name__ == "__main__":
