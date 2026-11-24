@@ -7,6 +7,8 @@ from typing import Any, Optional
 from unittest.mock import MagicMock, patch
 
 from ariston.ariston_api import (
+    RATE_LIMIT_BACKOFF_MAX_SECONDS,
+    RATE_LIMIT_BACKOFF_START_SECONDS,
     AristonAPI,
     ConnectionException,
     _parse_block_seconds,
@@ -99,21 +101,19 @@ class RateLimitTests(unittest.TestCase):
         self.assertEqual(sleeps, [67])  # parsed 66 + 1s margin
         self.assertGreater(api._blocked_until, 0)  # block window was set
 
-    def test_429_without_parsable_body(self):
-        responses = [
-            _sync_response(429, b"Too many requests"),
-            _sync_response(200, b"{}", {"ok": True}),
-        ]
-        http = MagicMock(side_effect=responses)
+    def test_429_without_parsable_body_backs_off_without_retry(self):
+        http = MagicMock(side_effect=[_sync_response(429, b"Requests are blocked")])
         sleeps: list[int] = []
+        api = _api()
         with patch("ariston.ariston_api.requests.request", http), patch(
             "ariston.ariston_api.time.sleep", side_effect=sleeps.append
-        ):
-            result = _api()._get("https://example/api")
+        ), patch("ariston.ariston_api.time.time", return_value=1000.0):
+            with self.assertRaises(ConnectionException):
+                api._get("https://example/api")
 
-        self.assertEqual(result, {"ok": True})
-        self.assertEqual(sleeps, [5])  # documented fallback
-        self.assertEqual(http.call_count, 2)
+        self.assertEqual(http.call_count, 1)  # no retry while blocked
+        self.assertEqual(sleeps, [])
+        self.assertEqual(api._blocked_until, 1000.0 + RATE_LIMIT_BACKOFF_START_SECONDS)
 
     def test_429_twice_raises(self):
         body = b"Requests are blocked for 10 seconds"
@@ -220,6 +220,57 @@ class RateLimitTests(unittest.TestCase):
 
         self.assertGreater(blocked._blocked_until, 0)
         self.assertEqual(other._blocked_until, 0.0)  # untouched by the 429
+
+
+    def test_async_429_without_duration_backs_off_doubles_and_caps(self):
+        api = _api()
+        calls: list[int] = []
+        sleeps: list[Optional[int]] = []
+        waits: list[float] = []
+
+        async def blocked_request() -> None:
+            responses = [_FakeAiohttpResponse(429, b"Requests are blocked")]
+            with patch(
+                "ariston.ariston_api.aiohttp.ClientSession",
+                _fake_session_cls(responses, calls),
+            ), patch(
+                "ariston.ariston_api.asyncio.sleep", side_effect=sleeps.append
+            ), patch("ariston.ariston_api.time.time", return_value=1000.0):
+                with self.assertRaises(ConnectionException):
+                    await api._async_get("https://example/api")
+
+        for _ in range(5):
+            api._blocked_until = 0.0  # the previous pause has ended
+            asyncio.run(blocked_request())
+            waits.append(api._blocked_until - 1000.0)
+
+        start = RATE_LIMIT_BACKOFF_START_SECONDS
+        self.assertEqual(waits, [start, 2 * start, 4 * start, 8 * start, 8 * start])
+        self.assertEqual(waits[-1], RATE_LIMIT_BACKOFF_MAX_SECONDS)
+        self.assertEqual(len(calls), 5)  # one request per pause, no retries
+        self.assertEqual(sleeps, [])
+
+    def test_async_success_resets_backoff(self):
+        api = _api()
+        api._rate_limit_backoff_seconds = 4 * RATE_LIMIT_BACKOFF_START_SECONDS
+        calls: list[int] = []
+
+        async def run(responses: list) -> Any:
+            with patch(
+                "ariston.ariston_api.aiohttp.ClientSession",
+                _fake_session_cls(responses, calls),
+            ), patch("ariston.ariston_api.time.time", return_value=1000.0):
+                return await api._async_get("https://example/api")
+
+        self.assertEqual(
+            asyncio.run(run([_FakeAiohttpResponse(200, b"{}", {"ok": True})])),
+            {"ok": True},
+        )
+        self.assertEqual(api._rate_limit_backoff_seconds, 0)
+
+        with self.assertRaises(ConnectionException):
+            asyncio.run(run([_FakeAiohttpResponse(429, b"Requests are blocked")]))
+        self.assertEqual(api._blocked_until, 1000.0 + RATE_LIMIT_BACKOFF_START_SECONDS)
 
 
 if __name__ == "__main__":

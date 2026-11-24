@@ -5,6 +5,7 @@ import asyncio
 
 import logging
 import math
+import time
 from datetime import date
 from typing import Any, Optional
 
@@ -29,6 +30,15 @@ from .const import (
 )
 from .device import AristonDevice
 
+# Hybrid and heat pump menu items cost up to four extra requests per refresh
+# (more when the per-item fallback runs). Refreshing them on every poll exhausts
+# Ariston's per-account request budget, so they are refreshed less often and the
+# last values are kept in between.
+HYBRID_MENU_ITEMS_REFRESH_SECONDS = 30 * 60
+HYBRID_MENU_ITEM_IDS = frozenset(
+    item.value for group in MenuItemNames.hybrid_groups() for item in group
+)
+
 _LOGGER = logging.getLogger(__name__)
 _MENU_ITEM_UNAVAILABLE_VALUES = frozenset({3276.0, 3276.7, -3276.8, -3277.0})
 _CH_RETURN_TEMP_UNAVAILABLE_VALUES = _MENU_ITEM_UNAVAILABLE_VALUES | {0.0}
@@ -50,6 +60,7 @@ class AristonGalevoDevice(AristonDevice):
         self.consumptions_settings: dict[str, Any] = {}
         self.energy_account: dict[str, Any] = {}
         self.menu_items: list[dict[str, Any]] = []
+        self._hybrid_menu_items_requested_at: Optional[float] = None
 
     @property
     def consumption_type(self) -> str:
@@ -121,6 +132,29 @@ class AristonGalevoDevice(AristonDevice):
             or self.features.get(DeviceFeatures.HP_SYS) is True
         )
 
+    def _hybrid_menu_items_due(self) -> bool:
+        """Return True if this refresh should request the hybrid menu items."""
+        if not self._should_include_hybrid_menu_items():
+            return False
+        last = self._hybrid_menu_items_requested_at
+        if last is not None and time.monotonic() - last < HYBRID_MENU_ITEMS_REFRESH_SECONDS:
+            return False
+        self._hybrid_menu_items_requested_at = time.monotonic()
+        return True
+
+    def _with_cached_hybrid_menu_items(
+        self, items: list[dict[str, Any]], include_hybrid_items: bool
+    ) -> list[dict[str, Any]]:
+        """Keep the last hybrid menu items when this refresh skipped them."""
+        if include_hybrid_items or not self._should_include_hybrid_menu_items():
+            return items
+        ids = {item.get("id") for item in items}
+        return items + [
+            item
+            for item in self.menu_items
+            if item.get("id") in HYBRID_MENU_ITEM_IDS and item.get("id") not in ids
+        ]
+
     def update_state(self) -> None:
         """Update the device states from the cloud"""
         if len(self.features) == 0:
@@ -132,10 +166,13 @@ class AristonGalevoDevice(AristonDevice):
             self.language_tag,
             self.umsys,
         )
+        include_hybrid_items = self._hybrid_menu_items_due()
         try:
-            self.menu_items = self.api.get_menu_items(
-                self.gw,
-                include_hybrid_items=self._should_include_hybrid_menu_items(),
+            self.menu_items = self._with_cached_hybrid_menu_items(
+                self.api.get_menu_items(
+                    self.gw, include_hybrid_items=include_hybrid_items
+                ),
+                include_hybrid_items,
             )
         except ConnectionException as error:
             if not self._should_retain_menu_items_after_error(error):
@@ -155,7 +192,7 @@ class AristonGalevoDevice(AristonDevice):
                 self.umsys,
             ),
             self._async_get_menu_items(
-                include_hybrid_items=self._should_include_hybrid_menu_items()
+                include_hybrid_items=self._hybrid_menu_items_due()
             ),
         )
         self._update_state()
@@ -165,13 +202,14 @@ class AristonGalevoDevice(AristonDevice):
     ) -> list[dict[str, Any]]:
         """Get menu items while retaining the last values for server errors."""
         try:
-            return await self.api.async_get_menu_items(
+            items = await self.api.async_get_menu_items(
                 self.gw, include_hybrid_items=include_hybrid_items
             )
         except ConnectionException as error:
             if not self._should_retain_menu_items_after_error(error):
                 raise
             return self.menu_items
+        return self._with_cached_hybrid_menu_items(items, include_hybrid_items)
 
     def _should_retain_menu_items_after_error(
         self, error: ConnectionException

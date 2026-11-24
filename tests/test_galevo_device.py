@@ -114,6 +114,38 @@ class AristonGalevoDeviceTests(unittest.TestCase):
             "gw-1", include_hybrid_items=False
         )
 
+    def test_async_update_throttles_hybrid_menu_items_and_keeps_last_values(self):
+        device = self.make_device()
+        device.features = {DeviceFeatures.HP_SYS: True}
+        device.api.async_get_properties = AsyncMock(return_value=self.make_data())
+        core = {"id": MenuItemNames.SIGNAL_STRENGTH.value, PropertyType.VALUE: 80}
+        hybrid = {"id": MenuItemNames.HP_OUTSIDE_AIR_TEMP.value, PropertyType.VALUE: 12.0}
+        device.api.async_get_menu_items = AsyncMock(return_value=[core, hybrid])
+
+        with patch("ariston.galevo_device.time.monotonic", return_value=1000.0):
+            asyncio.run(device.async_update_state())
+        device.api.async_get_menu_items.assert_awaited_once_with(
+            "gw-1", include_hybrid_items=True
+        )
+
+        # A refresh inside the window asks for core items only and keeps the
+        # last hybrid values.
+        device.api.async_get_menu_items = AsyncMock(return_value=[core])
+        with patch("ariston.galevo_device.time.monotonic", return_value=2000.0):
+            asyncio.run(device.async_update_state())
+        device.api.async_get_menu_items.assert_awaited_once_with(
+            "gw-1", include_hybrid_items=False
+        )
+        self.assertEqual(device.hp_outside_air_temp_value, 12.0)
+
+        # Once the window has passed, hybrid items are requested again.
+        device.api.async_get_menu_items = AsyncMock(return_value=[core, hybrid])
+        with patch("ariston.galevo_device.time.monotonic", return_value=2800.0):
+            asyncio.run(device.async_update_state())
+        device.api.async_get_menu_items.assert_awaited_once_with(
+            "gw-1", include_hybrid_items=True
+        )
+
     def test_sync_update_requests_hybrid_menu_items_from_features(self):
         device = self.make_device()
         device.attributes["hybrSys"] = True
@@ -817,6 +849,7 @@ class AristonGalevoDeviceTests(unittest.TestCase):
             },
         ]
         device.api.async_get_menu_items = AsyncMock(return_value=updated_hp)
+        device._hybrid_menu_items_requested_at = None  # next hybrid refresh is due
         asyncio.run(device.async_update_state())
         device.api.async_get_menu_items.assert_awaited_once_with(
             "gw-1", include_hybrid_items=True

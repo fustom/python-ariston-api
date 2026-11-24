@@ -56,15 +56,18 @@ def _parse_block_seconds(content: bytes) -> Optional[int]:
     return int(match.group(1))
 
 
-def _rate_limit_wait_seconds(content: bytes) -> int:
-    """Effective wait for a 429: parsed duration + 1s margin, else 5s."""
+# Ariston answers "Requests are blocked" without a duration once an account
+# exceeds its request budget. Retrying keeps the block alive, so every request
+# of the instance pauses instead, doubling the pause while the block persists.
+RATE_LIMIT_BACKOFF_START_SECONDS = 15 * 60
+RATE_LIMIT_BACKOFF_MAX_SECONDS = 2 * 60 * 60
+
+
+def _rate_limit_wait_seconds(content: bytes) -> Optional[int]:
+    """Effective wait for a 429: parsed duration + 1s margin, else None."""
     parsed = _parse_block_seconds(content)
     if parsed is None:
-        _LOGGER.warning(
-            "Rate limited (429) without parsable block duration; "
-            "falling back to 5s wait"
-        )
-        return 5
+        return None
     _LOGGER.warning("Rate limited (429) for %s seconds; waiting it out", parsed + 1)
     return parsed + 1
 
@@ -97,6 +100,8 @@ class AristonAPI:
         # API URLs must not silence each other; the three coordinators for
         # one account still share one API instance.
         self._blocked_until = 0.0
+        # Current pause for 429s without a block duration; 0 after a success.
+        self._rate_limit_backoff_seconds = 0
         # Sync (requests) R2 web-app session; created lazily on first use.
         self.__r2_requests_session: Optional[requests.Session] = None
 
@@ -606,6 +611,7 @@ class AristonAPI:
                         return self.__request(method, path, params, body, True)
                     raise ConnectionException(response.status_code)
 
+        self._rate_limit_backoff_seconds = 0
         if len(response.content) > 0:
             json = response.json()
             _LOGGER.debug("Response %s", json)
@@ -617,6 +623,19 @@ class AristonAPI:
         """POST request"""
         return self.__request("POST", path, None, body)
 
+    def _start_rate_limit_backoff(self) -> None:
+        """Pause all requests of this instance after a 429 without a duration."""
+        self._rate_limit_backoff_seconds = (
+            min(self._rate_limit_backoff_seconds * 2, RATE_LIMIT_BACKOFF_MAX_SECONDS)
+            if self._rate_limit_backoff_seconds
+            else RATE_LIMIT_BACKOFF_START_SECONDS
+        )
+        self._blocked_until = time.time() + self._rate_limit_backoff_seconds
+        _LOGGER.warning(
+            "Rate limited (429) without block duration; pausing requests for %s seconds",
+            self._rate_limit_backoff_seconds,
+        )
+
     def __handle_rate_limit(
         self,
         response,
@@ -626,9 +645,12 @@ class AristonAPI:
         params: Optional[dict[str, Any]],
         body: Any,
     ) -> Optional[dict[str, Any]]:
-        """Sleep out the 429 block window, retry once, per-instance deadline."""
+        """Sleep out a short 429 block window and retry once; back off otherwise."""
         content = response.content
         wait_seconds = _rate_limit_wait_seconds(content)
+        if wait_seconds is None:
+            self._start_rate_limit_backoff()
+            raise ConnectionException(response.status_code, content.decode())
         self._blocked_until = time.time() + wait_seconds
         if not is_retry:
             time.sleep(wait_seconds)
@@ -1513,6 +1535,7 @@ class AristonAPI:
                             )
                         raise ConnectionException(response.status)
 
+            self._rate_limit_backoff_seconds = 0
             if response.content_length and response.content_length > 0:
                 json = await response.json()
                 _LOGGER.debug("Response %s", json)
@@ -1538,9 +1561,12 @@ class AristonAPI:
         body: Any,
         timeout_seconds: int,
     ) -> Optional[dict[str, Any]]:
-        """Sleep out the 429 block window, retry once, share the deadline."""
+        """Sleep out a short 429 block window and retry once; back off otherwise."""
         content = await response.content.read()
         wait_seconds = _rate_limit_wait_seconds(content)
+        if wait_seconds is None:
+            self._start_rate_limit_backoff()
+            raise ConnectionException(response.status, content)
         self._blocked_until = time.time() + wait_seconds
         if not is_retry:
             await asyncio.sleep(wait_seconds)
