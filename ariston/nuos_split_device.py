@@ -8,6 +8,7 @@ from typing import Optional
 from .velis_device import AristonVelisDevice
 from .const import (
     NuosSplitOperativeMode,
+    NuosSplitPlantMode,
     NuosSplitProperties,
     PlantData,
     SlpDeviceSettings,
@@ -112,6 +113,40 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     def water_heater_mode_value(self) -> Optional[int]:
         """Get water heater mode value"""
         return self.data.get(NuosSplitProperties.OP_MODE, None)
+
+    @property
+    def water_heater_plant_mode_value(self) -> Optional[int]:
+        """Get the plant mode value (1 = Manual, 2 = Program)"""
+        return self.data.get(NuosSplitProperties.MODE, None)
+
+    @property
+    def water_heater_plant_mode_text(self) -> Optional[str]:
+        """Get the plant mode name (MANUAL / PROGRAM)"""
+        value = self.water_heater_plant_mode_value
+        if value is None:
+            return None
+        try:
+            return NuosSplitPlantMode(value).name
+        except ValueError:
+            _LOGGER.debug("Unknown Nuos Split plant mode value: %s", value)
+            return None
+
+    @property
+    def water_heater_plant_mode_texts(self) -> list[str]:
+        """Get the available plant mode names"""
+        return [mode.name for mode in NuosSplitPlantMode]
+
+    def set_water_heater_plant_mode(self, plant_mode: str) -> None:
+        """Set the plant mode (MANUAL / PROGRAM)"""
+        mode = NuosSplitPlantMode[plant_mode]
+        self.api.set_nuos_plant_mode_via_r2(self.gw, mode)
+        self.data[NuosSplitProperties.MODE] = mode.value
+
+    async def async_set_water_heater_plant_mode(self, plant_mode: str) -> None:
+        """Async set the plant mode (MANUAL / PROGRAM)"""
+        mode = NuosSplitPlantMode[plant_mode]
+        await self.api.async_set_nuos_plant_mode_via_r2(self.gw, mode)
+        self.data[NuosSplitProperties.MODE] = mode.value
 
     @property
     def holiday_end_date(self) -> Optional[str]:
