@@ -4,7 +4,7 @@ import asyncio
 import logging
 from typing import Any, Optional, Type
 
-from .ariston_api import AristonAPI, ConnectionException
+from .ariston_api import AristonAPI, ConnectionException, RateLimitException
 from .const import (
     ARISTON_API_URL,
     ARISTON_USER_AGENT,

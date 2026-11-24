@@ -57,21 +57,39 @@ def _parse_block_seconds(content: bytes) -> Optional[int]:
     return int(match.group(1))
 
 
-def _rate_limit_wait_seconds(content: bytes) -> int:
-    """Effective wait for a 429: parsed duration + 1s margin, else 5s."""
-    parsed = _parse_block_seconds(content)
-    if parsed is None:
-        _LOGGER.warning(
-            "Rate limited (429) without parsable block duration; "
-            "falling back to 5s wait"
-        )
-        return 5
-    _LOGGER.warning("Rate limited (429) for %s seconds; waiting it out", parsed + 1)
-    return parsed + 1
+def _parse_retry_after(response: Any) -> Optional[int]:
+    """Extract a delta-seconds Retry-After header, if the server sent one."""
+    headers = getattr(response, "headers", None)
+    if not headers:
+        return None
+    value = headers.get("Retry-After")
+    if not isinstance(value, str) or not value.strip().isdigit():
+        return None
+    return int(value.strip())
+
+
+# Back-off for 429s that do not say how long the block lasts (the cloud
+# answers a bare "Requests are blocked"). Retrying a few seconds later keeps
+# the account blocked, so wait progressively longer and do not retry inline.
+_UNKNOWN_BLOCK_BASE_SECONDS = 60
+_UNKNOWN_BLOCK_MAX_SECONDS = 900
 
 
 class ConnectionException(Exception):
     """When can not connect to Ariston cloud"""
+
+
+class RateLimitException(ConnectionException):
+    """Ariston cloud is rate limiting this account (HTTP 429).
+
+    ``args`` stays ``(429, content)`` so callers that inspect
+    ``error.args[0]`` keep working; ``retry_after`` is the number of
+    seconds until the block window is expected to end.
+    """
+
+    def __init__(self, content: Any, retry_after: float) -> None:
+        super().__init__(429, content)
+        self.retry_after = max(0.0, retry_after)
 
 
 class AristonAPI:
@@ -98,6 +116,9 @@ class AristonAPI:
         # API URLs must not silence each other; the three coordinators for
         # one account still share one API instance.
         self._blocked_until = 0.0
+        # Consecutive 429s without a block duration; drives the back-off
+        # and resets on the next successful response.
+        self._rate_limit_strikes = 0
         # Sync (requests) R2 web-app session; created lazily on first use.
         self.__r2_requests_session: Optional[requests.Session] = None
 
@@ -568,11 +589,8 @@ class AristonAPI:
         is_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Request with requests"""
-        if not is_retry and time.time() < self._blocked_until:
-            raise ConnectionException(
-                429,
-                "Rate limited; skipping request until the block window ends",
-            )
+        if not is_retry:
+            self._raise_if_blocked()
         headers: dict[str, Any] = {
             "User-Agent": self.__user_agent,
             "ar.authToken": self.__token,
@@ -607,6 +625,7 @@ class AristonAPI:
                         return self.__request(method, path, params, body, True)
                     raise ConnectionException(response.status_code)
 
+        self._rate_limit_strikes = 0
         if len(response.content) > 0:
             json = response.json()
             _LOGGER.debug("Response %s", json)
@@ -627,14 +646,56 @@ class AristonAPI:
         params: Optional[dict[str, Any]],
         body: Any,
     ) -> Optional[dict[str, Any]]:
-        """Sleep out the 429 block window, retry once, per-instance deadline."""
+        """Sleep out a known 429 block window and retry once, else raise."""
         content = response.content
-        wait_seconds = _rate_limit_wait_seconds(content)
-        self._blocked_until = time.time() + wait_seconds
-        if not is_retry:
+        wait_seconds, known = self._register_rate_limit(response, content)
+        if known and not is_retry:
             time.sleep(wait_seconds)
             return self.__request(method, path, params, body, True)
-        raise ConnectionException(response.status_code, content.decode())
+        raise RateLimitException(content.decode(errors="replace"), wait_seconds)
+
+    def _raise_if_blocked(self) -> None:
+        """Skip the request while this instance is inside a 429 block window."""
+        remaining = self._blocked_until - time.time()
+        if remaining > 0:
+            raise RateLimitException(
+                "Rate limited; skipping request until the block window ends",
+                remaining,
+            )
+
+    def _register_rate_limit(self, response: Any, content: bytes) -> tuple[int, bool]:
+        """Record a 429 and return (wait seconds, whether the duration is known).
+
+        A known duration (body text or Retry-After header) is honoured with a
+        1s margin. Without one, back off 60s, doubling per consecutive 429 up
+        to 15 minutes, because quick blind retries keep the account blocked.
+        """
+        parsed = _parse_block_seconds(content)
+        if parsed is None:
+            parsed = _parse_retry_after(response)
+        if parsed is not None:
+            wait_seconds = parsed + 1
+            _LOGGER.warning(
+                "Rate limited (429) for %s seconds; waiting it out", wait_seconds
+            )
+            self._blocked_until = max(self._blocked_until, time.time() + wait_seconds)
+            return wait_seconds, True
+
+        # Concurrent requests rejected by the same block count as one strike.
+        if time.time() >= self._blocked_until:
+            self._rate_limit_strikes += 1
+        wait_seconds = min(
+            _UNKNOWN_BLOCK_BASE_SECONDS * 2 ** max(self._rate_limit_strikes - 1, 0),
+            _UNKNOWN_BLOCK_MAX_SECONDS,
+        )
+        self._blocked_until = max(self._blocked_until, time.time() + wait_seconds)
+        _LOGGER.warning(
+            "Rate limited (429) without a block duration (%s in a row); "
+            "pausing requests for %s seconds",
+            self._rate_limit_strikes,
+            wait_seconds,
+        )
+        return wait_seconds, False
 
     def _get(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
         """GET request"""
@@ -1508,11 +1569,8 @@ class AristonAPI:
         timeout_seconds: int = 30,
     ) -> Optional[dict[str, Any]]:
         """Async request with aiohttp"""
-        if not is_retry and time.time() < self._blocked_until:
-            raise ConnectionException(
-                429,
-                "Rate limited; skipping request until the block window ends",
-            )
+        if not is_retry:
+            self._raise_if_blocked()
         headers: dict[str, Any] = {
             "User-Agent": self.__user_agent,
             "ar.authToken": self.__token,
@@ -1558,6 +1616,7 @@ class AristonAPI:
                             )
                         raise ConnectionException(response.status)
 
+            self._rate_limit_strikes = 0
             if response.content_length and response.content_length > 0:
                 json = await response.json()
                 _LOGGER.debug("Response %s", json)
@@ -1583,16 +1642,15 @@ class AristonAPI:
         body: Any,
         timeout_seconds: int,
     ) -> Optional[dict[str, Any]]:
-        """Sleep out the 429 block window, retry once, share the deadline."""
+        """Sleep out a known 429 block window and retry once, else raise."""
         content = await response.content.read()
-        wait_seconds = _rate_limit_wait_seconds(content)
-        self._blocked_until = time.time() + wait_seconds
-        if not is_retry:
+        wait_seconds, known = self._register_rate_limit(response, content)
+        if known and not is_retry:
             await asyncio.sleep(wait_seconds)
             return await self.__async_request(
                 method, path, params, body, True, timeout_seconds
             )
-        raise ConnectionException(response.status, content)
+        raise RateLimitException(content, wait_seconds)
 
     async def _async_get(
         self, path: str, params: Optional[dict[str, Any]] = None
