@@ -609,7 +609,7 @@ class AristonAPI:
 
         if len(response.content) > 0:
             json = response.json()
-            _LOGGER.debug("Response %s", json)
+            _LOGGER.debug("Response received")
             return json
 
         return None
@@ -1560,7 +1560,7 @@ class AristonAPI:
 
             if response.content_length and response.content_length > 0:
                 json = await response.json()
-                _LOGGER.debug("Response %s", json)
+                _LOGGER.debug("Response received")
                 return json
 
             return None

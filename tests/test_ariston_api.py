@@ -85,13 +85,15 @@ class AristonAPIRequestTests(unittest.TestCase):
             FakeResponse([{"gw": "gateway-1"}]),
         ]
 
-        with patch(
-            "ariston.ariston_api.requests.request", side_effect=responses
-        ) as request:
-            self.assertTrue(api.connect())
-            devices = api.get_detailed_devices()
+        with self.assertLogs("ariston.ariston_api", level="DEBUG") as logs:
+            with patch(
+                "ariston.ariston_api.requests.request", side_effect=responses
+            ) as request:
+                self.assertTrue(api.connect())
+                devices = api.get_detailed_devices()
 
         self.assertEqual(devices, [{"gw": "gateway-1"}])
+        self.assertNotIn("session-token", "\n".join(logs.output))
         login_call, devices_call = request.call_args_list
         # requests expects seconds: a regression to milliseconds (30000) would
         # let a hung connection block the caller for hours.
@@ -126,11 +128,12 @@ class AristonAPIRequestTests(unittest.TestCase):
             self.assertTrue(await api.async_connect())
             return await api.async_get_detailed_devices()
 
-        with patch(
-            "ariston.ariston_api.aiohttp.ClientSession",
-            side_effect=[login_session, devices_session],
-        ) as client_session:
-            devices = asyncio.run(connect_and_discover())
+        with self.assertLogs("ariston.ariston_api", level="DEBUG") as logs:
+            with patch(
+                "ariston.ariston_api.aiohttp.ClientSession",
+                side_effect=[login_session, devices_session],
+            ) as client_session:
+                devices = asyncio.run(connect_and_discover())
 
         # Every async request must set an explicit total timeout instead of
         # relying on aiohttp's 5 minute default.
@@ -139,6 +142,7 @@ class AristonAPIRequestTests(unittest.TestCase):
             self.assertEqual(call.kwargs["timeout"], aiohttp.ClientTimeout(total=30))
 
         self.assertEqual(devices, [{"gw": "gateway-1"}])
+        self.assertNotIn("async-session-token", "\n".join(logs.output))
         self.assertEqual(
             login_session.calls[0][0],
             ("POST", "https://example.test/api/accounts/login"),
