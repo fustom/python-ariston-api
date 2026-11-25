@@ -234,10 +234,15 @@ class VelisPlantMode(WaterHeaterMode):
 
 @unique
 class NuosSplitPlantMode(Enum):
-    """NuosSplit plant mode enum"""
+    """NuosSplit plant mode enum (slpPlantData `mode` / R2 `plantMode`).
 
-    MANUAL = 1
-    PROGRAM = 2
+    Verified on a real VELIS NuosSplit (2026-11-25): the official app shows
+    "Programmé" for 1 and "Manuel" for 2. Members stay in MANUAL, PROGRAM
+    order so the exposed options keep the same order.
+    """
+
+    MANUAL = 2
+    PROGRAM = 1
 
 
 class NuosSplitOperativeMode(WaterHeaterMode):
