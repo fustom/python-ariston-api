@@ -14,7 +14,7 @@ dependencies = [
 ]
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
-version = "0.19.16"
+version = "0.19.18"
 dynamic = ['description']
 
 [project.urls]

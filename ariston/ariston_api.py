@@ -37,6 +37,7 @@ from .const import (
     DeviceProperties,
     LydosPlantMode,
     NuosSplitOperativeMode,
+    NuosSplitPlantMode,
     PlantData,
     ThermostatProperties,
     WaterHeaterMode,
@@ -969,6 +970,26 @@ class AristonAPI:
             gw_id, self._build_nuos_r2_payload(plant_data, value.value)
         )
 
+    def set_nuos_plant_mode_via_r2(
+        self, gw_id: str, value: NuosSplitPlantMode
+    ) -> None:
+        """Set the Nuos Split plant mode (Manual / Program) via the R2 web app.
+
+        The official app writes it as ``viewModel.plantMode`` in the same
+        PlantHomeSlp/SetData envelope used for the operative mode; the cloud
+        then reports it back as ``mode`` in slpPlantData.
+        """
+        if not self.__r2_logged_in:
+            self._r2_login()
+        try:
+            plant_data = self._r2_get_slp_plant_data(gw_id)
+        except ConnectionException:
+            self._r2_login()
+            plant_data = self._r2_get_slp_plant_data(gw_id)
+        self._r2_post_set_data(
+            gw_id, self._build_nuos_r2_payload(plant_data, plant_mode=value.value)
+        )
+
     async def async_connect(self) -> bool:
         """Async login to ariston cloud and get token"""
 
@@ -1365,12 +1386,22 @@ class AristonAPI:
         )
 
     @staticmethod
-    def _build_nuos_r2_payload(plant_data: dict[str, Any], op_mode: int) -> dict[str, Any]:
-        """Build the R2 PlantHomeSlp/SetData envelope for an operative mode.
+    def _build_nuos_r2_payload(
+        plant_data: dict[str, Any],
+        op_mode: Optional[int] = None,
+        plant_mode: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """Build the R2 PlantHomeSlp/SetData envelope.
 
         Mirrors the official web app: the cached plantData is echoed back
-        and only the viewModel fields change.
+        and only the viewModel fields change. ``op_mode`` is the operative
+        mode (GREEN, COMFORT...), ``plant_mode`` the Manual/Program switch
+        (``NuosSplitPlantMode``). ``None`` keeps the current cloud value.
         """
+        if op_mode is None:
+            op_mode = plant_data.get("opMode")
+        if plant_mode is None:
+            plant_mode = plant_data.get("mode")
         return {
             "plantData": {
                 "__type__": ["my.entities.entityiface", "my.entities.slpplantdata"],
@@ -1388,7 +1419,7 @@ class AristonAPI:
             },
             "viewModel": {
                 "on": plant_data.get("on"),
-                "plantMode": plant_data.get("mode"),
+                "plantMode": plant_mode,
                 "opMode": op_mode,
                 "boostOn": plant_data.get("boostOn"),
                 "comfortTemp": plant_data.get("comfortTemp"),
@@ -1475,6 +1506,20 @@ class AristonAPI:
             await self._async_r2_login()
             plant_data = await self._async_r2_get_slp_plant_data(gw_id)
         payload = self._build_nuos_r2_payload(plant_data, value.value)
+        await self._async_r2_post_set_data(gw_id, payload)
+
+    async def async_set_nuos_plant_mode_via_r2(
+        self, gw_id: str, value: NuosSplitPlantMode
+    ) -> None:
+        """Async set the Nuos Split plant mode (Manual / Program) via R2."""
+        if not self.__r2_logged_in:
+            await self._async_r2_login()
+        try:
+            plant_data = await self._async_r2_get_slp_plant_data(gw_id)
+        except ConnectionException:
+            await self._async_r2_login()
+            plant_data = await self._async_r2_get_slp_plant_data(gw_id)
+        payload = self._build_nuos_r2_payload(plant_data, plant_mode=value.value)
         await self._async_r2_post_set_data(gw_id, payload)
 
     async def _async_r2_post_set_data(
