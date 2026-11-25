@@ -60,7 +60,8 @@ class AristonGalevoDevice(AristonDevice):
         self.consumptions_settings: dict[str, Any] = {}
         self.energy_account: dict[str, Any] = {}
         self.menu_items: list[dict[str, Any]] = []
-        self._hybrid_menu_items_requested_at: Optional[float] = None
+        # When the hybrid menu items were last fetched successfully.
+        self._hybrid_menu_items_fetched_at: Optional[float] = None
 
     @property
     def consumption_type(self) -> str:
@@ -136,11 +137,17 @@ class AristonGalevoDevice(AristonDevice):
         """Return True if this refresh should request the hybrid menu items."""
         if not self._should_include_hybrid_menu_items():
             return False
-        last = self._hybrid_menu_items_requested_at
-        if last is not None and time.monotonic() - last < HYBRID_MENU_ITEMS_REFRESH_SECONDS:
-            return False
-        self._hybrid_menu_items_requested_at = time.monotonic()
-        return True
+        last = self._hybrid_menu_items_fetched_at
+        return last is None or time.monotonic() - last >= HYBRID_MENU_ITEMS_REFRESH_SECONDS
+
+    def _mark_hybrid_menu_items_fetched(self, include_hybrid_items: bool) -> None:
+        """Start the refresh window only once the hybrid items really arrived.
+
+        A request skipped by a 429 pause or failed by a server error must not
+        delay the next attempt by a whole window.
+        """
+        if include_hybrid_items:
+            self._hybrid_menu_items_fetched_at = time.monotonic()
 
     def _with_cached_hybrid_menu_items(
         self, items: list[dict[str, Any]], include_hybrid_items: bool
@@ -174,6 +181,7 @@ class AristonGalevoDevice(AristonDevice):
                 ),
                 include_hybrid_items,
             )
+            self._mark_hybrid_menu_items_fetched(include_hybrid_items)
         except ConnectionException as error:
             if not self._should_retain_menu_items_after_error(error):
                 raise
@@ -184,23 +192,29 @@ class AristonGalevoDevice(AristonDevice):
         if len(self.features) == 0:
             await self.async_get_features()
 
-        (self.data, self.menu_items) = await asyncio.gather(
+        include_hybrid_items = self._hybrid_menu_items_due()
+        (self.data, (self.menu_items, fetched)) = await asyncio.gather(
             self.api.async_get_properties(
                 self.gw,
                 self.features,
                 self.language_tag,
                 self.umsys,
             ),
-            self._async_get_menu_items(
-                include_hybrid_items=self._hybrid_menu_items_due()
-            ),
+            self._async_get_menu_items(include_hybrid_items=include_hybrid_items),
         )
+        # Only once both results are stored: a failed properties request
+        # discards the menu items, so they must be fetched again.
+        self._mark_hybrid_menu_items_fetched(include_hybrid_items and fetched)
         self._update_state()
 
     async def _async_get_menu_items(
         self, include_hybrid_items: bool = False
-    ) -> list[dict[str, Any]]:
-        """Get menu items while retaining the last values for server errors."""
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Get menu items while retaining the last values for server errors.
+
+        Returns the items and whether they were fetched (False when the last
+        values were retained after a server error).
+        """
         try:
             items = await self.api.async_get_menu_items(
                 self.gw, include_hybrid_items=include_hybrid_items
@@ -208,8 +222,8 @@ class AristonGalevoDevice(AristonDevice):
         except ConnectionException as error:
             if not self._should_retain_menu_items_after_error(error):
                 raise
-            return self.menu_items
-        return self._with_cached_hybrid_menu_items(items, include_hybrid_items)
+            return self.menu_items, False
+        return self._with_cached_hybrid_menu_items(items, include_hybrid_items), True
 
     def _should_retain_menu_items_after_error(
         self, error: ConnectionException

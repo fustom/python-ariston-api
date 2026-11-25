@@ -571,9 +571,12 @@ class AristonAPI:
         params: Optional[dict[str, Any]] = None,
         body: Any = None,
         is_retry: bool = False,
+        waited_out_block: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Request with requests"""
-        if not is_retry and time.time() < self._blocked_until:
+        # Retries are checked too: a 405/5xx retry must not slip through a
+        # pause that another in-flight response started meanwhile.
+        if not waited_out_block and time.time() < self._blocked_until:
             raise ConnectionException(
                 429,
                 "Rate limited; skipping request until the block window ends",
@@ -612,7 +615,7 @@ class AristonAPI:
                         return self.__request(method, path, params, body, True)
                     raise ConnectionException(response.status_code)
 
-        self._rate_limit_backoff_seconds = 0
+        self._reset_rate_limit_backoff()
         if len(response.content) > 0:
             json = response.json()
             _LOGGER.debug("Response %s", json)
@@ -626,16 +629,42 @@ class AristonAPI:
 
     def _start_rate_limit_backoff(self) -> None:
         """Pause all requests of this instance after a 429 without a duration."""
+        if self._rate_limit_backoff_seconds and time.time() < self._blocked_until:
+            # Sent before the current pause started: same block, keep the pause.
+            return
         self._rate_limit_backoff_seconds = (
             min(self._rate_limit_backoff_seconds * 2, RATE_LIMIT_BACKOFF_MAX_SECONDS)
             if self._rate_limit_backoff_seconds
             else RATE_LIMIT_BACKOFF_START_SECONDS
         )
-        self._blocked_until = time.time() + self._rate_limit_backoff_seconds
+        self._blocked_until = max(
+            self._blocked_until, time.time() + self._rate_limit_backoff_seconds
+        )
         _LOGGER.warning(
             "Rate limited (429) without block duration; pausing requests for %s seconds",
             self._rate_limit_backoff_seconds,
         )
+
+    def _reset_rate_limit_backoff(self) -> None:
+        """Forget the backoff after a success, unless a pause is still active.
+
+        A success that was in flight when a pause started does not prove the
+        block is over, so it must not reset the doubling.
+        """
+        if time.time() >= self._blocked_until:
+            self._rate_limit_backoff_seconds = 0
+
+    def _start_rate_limit_wait(self, wait_seconds: int) -> Optional[float]:
+        """Block until a parsed 429 window ends, without shortening a longer pause.
+
+        Returns the end of the window to wait out, or None when a longer pause
+        is already active and the request must not be retried.
+        """
+        until = time.time() + wait_seconds
+        if self._blocked_until > until:
+            return None
+        self._blocked_until = until
+        return until
 
     def __handle_rate_limit(
         self,
@@ -652,10 +681,12 @@ class AristonAPI:
         if wait_seconds is None:
             self._start_rate_limit_backoff()
             raise ConnectionException(response.status_code, content.decode())
-        self._blocked_until = time.time() + wait_seconds
-        if not is_retry:
+        until = self._start_rate_limit_wait(wait_seconds)
+        if until is not None and not is_retry:
             time.sleep(wait_seconds)
-            return self.__request(method, path, params, body, True)
+            # Retry only if no longer pause started while waiting.
+            if self._blocked_until <= until:
+                return self.__request(method, path, params, body, True, True)
         raise ConnectionException(response.status_code, content.decode())
 
     def _get(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
@@ -1528,9 +1559,12 @@ class AristonAPI:
         body: Any = None,
         is_retry: bool = False,
         timeout_seconds: int = 30,
+        waited_out_block: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Async request with aiohttp"""
-        if not is_retry and time.time() < self._blocked_until:
+        # Retries are checked too: a 405/5xx retry must not slip through a
+        # pause that another in-flight response started meanwhile.
+        if not waited_out_block and time.time() < self._blocked_until:
             raise ConnectionException(
                 429,
                 "Rate limited; skipping request until the block window ends",
@@ -1580,7 +1614,7 @@ class AristonAPI:
                             )
                         raise ConnectionException(response.status)
 
-            self._rate_limit_backoff_seconds = 0
+            self._reset_rate_limit_backoff()
             if response.content_length and response.content_length > 0:
                 json = await response.json()
                 _LOGGER.debug("Response %s", json)
@@ -1612,12 +1646,14 @@ class AristonAPI:
         if wait_seconds is None:
             self._start_rate_limit_backoff()
             raise ConnectionException(response.status, content)
-        self._blocked_until = time.time() + wait_seconds
-        if not is_retry:
+        until = self._start_rate_limit_wait(wait_seconds)
+        if until is not None and not is_retry:
             await asyncio.sleep(wait_seconds)
-            return await self.__async_request(
-                method, path, params, body, True, timeout_seconds
-            )
+            # Retry only if no longer pause started while waiting.
+            if self._blocked_until <= until:
+                return await self.__async_request(
+                    method, path, params, body, True, timeout_seconds, True
+                )
         raise ConnectionException(response.status, content)
 
     async def _async_get(

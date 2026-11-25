@@ -4,7 +4,7 @@ import asyncio
 import time
 import unittest
 from typing import Any, Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from ariston.ariston_api import (
     RATE_LIMIT_BACKOFF_MAX_SECONDS,
@@ -65,6 +65,34 @@ def _fake_session_cls(responses: list, calls: list):
         async def request(self, *args: Any, **kwargs: Any):
             calls.append(1)
             return responses.pop(0)
+
+    return _Session
+
+
+def _gated_session_cls(responses: list, arrived: list, release: list, calls: list):
+    """Session whose responses come back only when the test releases them.
+
+    Lets a test keep several requests in flight and decide the order in
+    which their responses arrive.
+    """
+
+    class _Session:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_Session":
+            return self
+
+        async def __aexit__(self, *exc: Any) -> bool:
+            return False
+
+        async def request(self, *args: Any, **kwargs: Any):
+            index = len(calls)
+            calls.append(index)
+            if index < len(arrived):
+                arrived[index].set()
+                await release[index].wait()
+            return responses[index]
 
     return _Session
 
@@ -270,6 +298,187 @@ class RateLimitTests(unittest.TestCase):
 
         with self.assertRaises(ConnectionException):
             asyncio.run(run([_FakeAiohttpResponse(429, b"Requests are blocked")]))
+        self.assertEqual(api._blocked_until, 1000.0 + RATE_LIMIT_BACKOFF_START_SECONDS)
+
+
+    # -- a pause in progress must hold for responses that were in flight --
+
+    def _run_two_in_flight(self, api: AristonAPI, responses: list, sleep: AsyncMock):
+        """Send two requests, then return the first response before the second.
+
+        Both requests pass the pause check before either response arrives,
+        like two coordinators polling one account at the same moment.
+        """
+        calls: list[int] = []
+        outcomes: list[Any] = []
+
+        async def run() -> None:
+            arrived = [asyncio.Event(), asyncio.Event()]
+            release = [asyncio.Event(), asyncio.Event()]
+            with patch(
+                "ariston.ariston_api.aiohttp.ClientSession",
+                _gated_session_cls(responses, arrived, release, calls),
+            ), patch("ariston.ariston_api.asyncio.sleep", sleep), patch(
+                "ariston.ariston_api.time.time", return_value=1000.0
+            ):
+                tasks = [
+                    asyncio.ensure_future(api._async_get("https://example/a")),
+                    asyncio.ensure_future(api._async_get("https://example/b")),
+                ]
+                await arrived[0].wait()
+                await arrived[1].wait()
+                for gate, task in zip(release, tasks):
+                    gate.set()
+                    try:
+                        outcomes.append(await task)
+                    except ConnectionException as error:
+                        outcomes.append(error)
+
+        asyncio.run(run())
+        return calls, outcomes
+
+    def test_async_in_flight_short_429_keeps_active_pause(self):
+        """A 10 s 429 arriving during a 15 min pause neither shortens it nor retries."""
+        api = _api()
+        sleep = AsyncMock()
+        calls, outcomes = self._run_two_in_flight(
+            api,
+            [
+                _FakeAiohttpResponse(429, b"Requests are blocked"),
+                _FakeAiohttpResponse(429, b"Requests are blocked for 10 seconds"),
+            ],
+            sleep,
+        )
+
+        self.assertEqual(len(calls), 2)  # no retry after the short 429
+        sleep.assert_not_awaited()
+        self.assertIsInstance(outcomes[1], ConnectionException)
+        self.assertEqual(api._blocked_until, 1000.0 + RATE_LIMIT_BACKOFF_START_SECONDS)
+
+    def test_async_in_flight_500_does_not_retry_during_pause(self):
+        """The 5xx retry is checked against a pause that began while waiting."""
+        api = _api()
+        sleep = AsyncMock()
+        calls, outcomes = self._run_two_in_flight(
+            api,
+            [
+                _FakeAiohttpResponse(429, b"Requests are blocked"),
+                _FakeAiohttpResponse(500),
+            ],
+            sleep,
+        )
+
+        self.assertEqual(len(calls), 2)  # the retry never reached the network
+        sleep.assert_awaited_once_with(5)
+        self.assertEqual(outcomes[1].args[0], 429)  # skipped by the pause
+        self.assertEqual(api._blocked_until, 1000.0 + RATE_LIMIT_BACKOFF_START_SECONDS)
+
+    def test_async_in_flight_429_without_duration_does_not_double_pause(self):
+        api = _api()
+        calls, _ = self._run_two_in_flight(
+            api,
+            [
+                _FakeAiohttpResponse(429, b"Requests are blocked"),
+                _FakeAiohttpResponse(429, b"Requests are blocked"),
+            ],
+            AsyncMock(),
+        )
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(api._rate_limit_backoff_seconds, RATE_LIMIT_BACKOFF_START_SECONDS)
+        self.assertEqual(api._blocked_until, 1000.0 + RATE_LIMIT_BACKOFF_START_SECONDS)
+
+    def test_async_in_flight_success_keeps_pause_and_backoff(self):
+        """A success sent before the pause began does not prove the block is over."""
+        api = _api()
+        _, outcomes = self._run_two_in_flight(
+            api,
+            [
+                _FakeAiohttpResponse(429, b"Requests are blocked"),
+                _FakeAiohttpResponse(200, b"{}", {"ok": True}),
+            ],
+            AsyncMock(),
+        )
+
+        self.assertEqual(outcomes[1], {"ok": True})
+        self.assertEqual(api._rate_limit_backoff_seconds, RATE_LIMIT_BACKOFF_START_SECONDS)
+        self.assertEqual(api._blocked_until, 1000.0 + RATE_LIMIT_BACKOFF_START_SECONDS)
+
+    def test_async_429_wait_is_not_retried_if_a_longer_pause_starts(self):
+        api = _api()
+        calls: list[int] = []
+
+        async def longer_pause_meanwhile(_seconds: int) -> None:
+            api._start_rate_limit_backoff()  # another response blocked the account
+
+        async def run() -> None:
+            with patch(
+                "ariston.ariston_api.aiohttp.ClientSession",
+                _fake_session_cls(
+                    [_FakeAiohttpResponse(429, b"Requests are blocked for 10 seconds")],
+                    calls,
+                ),
+            ), patch(
+                "ariston.ariston_api.asyncio.sleep", side_effect=longer_pause_meanwhile
+            ), patch("ariston.ariston_api.time.time", return_value=1000.0):
+                with self.assertRaises(ConnectionException):
+                    await api._async_get("https://example/api")
+
+        asyncio.run(run())
+
+        self.assertEqual(len(calls), 1)  # no retry into the longer pause
+        self.assertEqual(api._blocked_until, 1000.0 + RATE_LIMIT_BACKOFF_START_SECONDS)
+
+    # -- sync twins: another thread starts the pause meanwhile --
+
+    def test_sync_500_retry_respects_pause_started_meanwhile(self):
+        api = _api()
+        http = MagicMock(side_effect=[_sync_response(500)])
+
+        with patch("ariston.ariston_api.requests.request", http), patch(
+            "ariston.ariston_api.time.sleep",
+            side_effect=lambda _seconds: api._start_rate_limit_backoff(),
+        ), patch("ariston.ariston_api.time.time", return_value=1000.0):
+            with self.assertRaises(ConnectionException) as raised:
+                api._get("https://example/api")
+
+        self.assertEqual(http.call_count, 1)
+        self.assertEqual(raised.exception.args[0], 429)
+
+    def test_sync_short_429_keeps_longer_pause(self):
+        api = _api()
+        sleeps: list[int] = []
+
+        def respond(*_args: Any, **_kwargs: Any):
+            api._start_rate_limit_backoff()  # another thread got blocked meanwhile
+            return _sync_response(429, b"Requests are blocked for 10 seconds")
+
+        with patch(
+            "ariston.ariston_api.requests.request", MagicMock(side_effect=respond)
+        ) as http, patch(
+            "ariston.ariston_api.time.sleep", side_effect=sleeps.append
+        ), patch("ariston.ariston_api.time.time", return_value=1000.0):
+            with self.assertRaises(ConnectionException):
+                api._get("https://example/api")
+
+        self.assertEqual(http.call_count, 1)
+        self.assertEqual(sleeps, [])
+        self.assertEqual(api._blocked_until, 1000.0 + RATE_LIMIT_BACKOFF_START_SECONDS)
+
+    def test_sync_429_wait_is_not_retried_if_a_longer_pause_starts(self):
+        api = _api()
+        http = MagicMock(
+            side_effect=[_sync_response(429, b"Requests are blocked for 10 seconds")]
+        )
+
+        with patch("ariston.ariston_api.requests.request", http), patch(
+            "ariston.ariston_api.time.sleep",
+            side_effect=lambda _seconds: api._start_rate_limit_backoff(),
+        ), patch("ariston.ariston_api.time.time", return_value=1000.0):
+            with self.assertRaises(ConnectionException):
+                api._get("https://example/api")
+
+        self.assertEqual(http.call_count, 1)
         self.assertEqual(api._blocked_until, 1000.0 + RATE_LIMIT_BACKOFF_START_SECONDS)
 
 

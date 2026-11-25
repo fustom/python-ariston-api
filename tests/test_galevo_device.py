@@ -146,6 +146,77 @@ class AristonGalevoDeviceTests(unittest.TestCase):
             "gw-1", include_hybrid_items=True
         )
 
+    def _hybrid_poll_setup(self):
+        device = self.make_device()
+        device.features = {DeviceFeatures.HP_SYS: True}
+        device.api.async_get_properties = AsyncMock(return_value=self.make_data())
+        core = {"id": MenuItemNames.SIGNAL_STRENGTH.value, PropertyType.VALUE: 80}
+        hybrid = {"id": MenuItemNames.HP_OUTSIDE_AIR_TEMP.value, PropertyType.VALUE: 12.0}
+        return device, core, hybrid
+
+    def _assert_hybrid_fetched_on_next_poll(self, device, core, hybrid):
+        """A poll one minute later must still ask for the hybrid items."""
+        device.api.async_get_properties = AsyncMock(return_value=self.make_data())
+        device.api.async_get_menu_items = AsyncMock(return_value=[core, hybrid])
+        with patch("ariston.galevo_device.time.monotonic", return_value=1060.0):
+            asyncio.run(device.async_update_state())
+        device.api.async_get_menu_items.assert_awaited_once_with(
+            "gw-1", include_hybrid_items=True
+        )
+        self.assertEqual(device.hp_outside_air_temp_value, 12.0)
+
+    def test_async_hybrid_items_fetched_on_first_poll_after_429_pause(self):
+        """Regression: a poll skipped by a 429 pause must not start the 30 min window."""
+        device, core, hybrid = self._hybrid_poll_setup()
+        device.api.async_get_menu_items = AsyncMock(
+            side_effect=ConnectionException(
+                429, "Rate limited; skipping request until the block window ends"
+            )
+        )
+        with patch("ariston.galevo_device.time.monotonic", return_value=1000.0):
+            with self.assertRaises(ConnectionException):
+                asyncio.run(device.async_update_state())
+
+        self._assert_hybrid_fetched_on_next_poll(device, core, hybrid)
+
+    def test_async_hybrid_items_fetched_after_retained_server_error(self):
+        device, core, hybrid = self._hybrid_poll_setup()
+        device.api.async_get_menu_items = AsyncMock(side_effect=ConnectionException(500))
+        with patch("ariston.galevo_device.time.monotonic", return_value=1000.0):
+            asyncio.run(device.async_update_state())  # keeps the last values
+
+        self._assert_hybrid_fetched_on_next_poll(device, core, hybrid)
+
+    def test_async_hybrid_items_fetched_again_when_properties_fail(self):
+        """Menu items discarded with a failed properties request are not 'fetched'."""
+        device, core, hybrid = self._hybrid_poll_setup()
+        device.api.async_get_properties = AsyncMock(side_effect=ConnectionException(429))
+        device.api.async_get_menu_items = AsyncMock(return_value=[core, hybrid])
+        with patch("ariston.galevo_device.time.monotonic", return_value=1000.0):
+            with self.assertRaises(ConnectionException):
+                asyncio.run(device.async_update_state())
+
+        self._assert_hybrid_fetched_on_next_poll(device, core, hybrid)
+
+    def test_sync_hybrid_items_fetched_on_first_poll_after_429_pause(self):
+        device, core, hybrid = self._hybrid_poll_setup()
+        device.api.get_properties.return_value = self.make_data()
+        device.api.get_menu_items.side_effect = ConnectionException(
+            429, "Rate limited; skipping request until the block window ends"
+        )
+        with patch("ariston.galevo_device.time.monotonic", return_value=1000.0):
+            with self.assertRaises(ConnectionException):
+                device.update_state()
+
+        device.api.get_menu_items.reset_mock(side_effect=True)
+        device.api.get_menu_items.return_value = [core, hybrid]
+        with patch("ariston.galevo_device.time.monotonic", return_value=1060.0):
+            device.update_state()
+        device.api.get_menu_items.assert_called_once_with(
+            "gw-1", include_hybrid_items=True
+        )
+        self.assertEqual(device.hp_outside_air_temp_value, 12.0)
+
     def test_sync_update_requests_hybrid_menu_items_from_features(self):
         device = self.make_device()
         device.attributes["hybrSys"] = True
@@ -849,7 +920,7 @@ class AristonGalevoDeviceTests(unittest.TestCase):
             },
         ]
         device.api.async_get_menu_items = AsyncMock(return_value=updated_hp)
-        device._hybrid_menu_items_requested_at = None  # next hybrid refresh is due
+        device._hybrid_menu_items_fetched_at = None  # next hybrid refresh is due
         asyncio.run(device.async_update_state())
         device.api.async_get_menu_items.assert_awaited_once_with(
             "gw-1", include_hybrid_items=True
