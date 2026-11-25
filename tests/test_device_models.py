@@ -455,6 +455,17 @@ class AristonDeviceModelTests(unittest.TestCase):
             "gw-1", NuosSplitOperativeMode.GREEN_PLUS
         )
 
+    def test_lydos_hybrid_reads_mode_8_as_boost(self):
+        device = self.make_device(AristonLydosHybridDevice)
+
+        for mode, expected in ((1, "IMEMORY"), (7, "BOOST"), (8, "BOOST"), (99, "UNKNOWN")):
+            with self.subTest(mode=mode):
+                device.data[LydosDeviceProperties.MODE] = mode
+                self.assertEqual(device.water_heater_mode_value, mode)
+                self.assertEqual(device.water_heater_current_mode_text, expected)
+
+        self.assertEqual(device.water_heater_mode_options, [1, 2, 6, 7])
+
     def test_lydos_hybrid_settings_accessors_and_all_commands(self):
         setting_keys = (
             SeDeviceSettings.SE_MAX_SETPOINT_TEMPERATURE_MIN,
@@ -522,7 +533,9 @@ class AristonDeviceModelTests(unittest.TestCase):
             with self.subTest(command=sync_name):
                 getattr(device, sync_name)(value)
                 if sync_name == "set_water_heater_operation_mode":
-                    self.assertTrue(device.api.set_lydos_mode.called)
+                    device.api.set_lydos_mode.assert_called_once_with(
+                        "gw-1", LydosPlantMode.BOOST
+                    )
                 elif sync_name == "set_water_heater_temperature":
                     self.assertTrue(device.api.set_lydos_temperature.called)
                 else:
@@ -541,7 +554,10 @@ class AristonDeviceModelTests(unittest.TestCase):
                 await getattr(device, async_name)(value)
 
         asyncio.run(set_values())
-        self.assertEqual(device.data[LydosDeviceProperties.MODE], LydosPlantMode.BOOST.value)
+        device.api.async_set_lydos_mode.assert_awaited_once_with(
+            "gw-1", LydosPlantMode.BOOST
+        )
+        self.assertEqual(device.data[LydosDeviceProperties.MODE], 7)
         self.assertEqual(device.data[LydosDeviceProperties.REQ_TEMP], 55)
         self.assertEqual(device.api.async_set_velis_plant_setting.await_count, 6)
 

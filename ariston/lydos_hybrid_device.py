@@ -41,6 +41,13 @@ class AristonLydosHybridDevice(AristonEvoLydosDevice):
         return LydosPlantMode
 
     @property
+    def water_heater_current_mode_text(self) -> str:
+        """Get the current mode text, including the permanent boost readback."""
+        if self.water_heater_mode_value == 8:
+            return LydosPlantMode.BOOST.name
+        return super().water_heater_current_mode_text
+
+    @property
     def max_setpoint_temp(self) -> str:
         return SeDeviceSettings.SE_MAX_SETPOINT_TEMPERATURE
 
