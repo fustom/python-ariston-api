@@ -200,51 +200,36 @@ class AristonAPI:
 
     def _prepare_rate_limit_retry(
         self, content: bytes, headers: Any, is_retry: bool
-    ) -> Optional[tuple[int, float, int, float]]:
-        """Update rate-limit state; return (wait, deadline, epoch, started_at) to retry."""
+    ) -> Optional[tuple[int, int]]:
+        """Update rate-limit state and return the wait and epoch for a retry."""
         now = time.time()
         parsed = _parse_block_seconds(content)
         if parsed is None:
             parsed = _parse_retry_after_seconds(headers)
 
-        if is_retry:
-            if parsed is not None:
-                wait_seconds = parsed + 1
-                _LOGGER.warning(_RATE_LIMIT_WAIT_LOG, wait_seconds)
-                self._blocked_until = max(self._blocked_until, now + wait_seconds)
-            else:
-                self._bump_rate_limit_cooldown()
-            return None
-
-        if self._rate_limit_retry_in_flight:
-            return None
-
-        wait_seconds: Optional[int] = None
         if parsed is not None:
             wait_seconds = parsed + 1
             _LOGGER.warning(_RATE_LIMIT_WAIT_LOG, wait_seconds)
-        elif self._rate_limit_streak == 0:
-            wait_seconds = _rate_limit_wait_seconds(content)
-
-        if wait_seconds is None:
+        elif self._rate_limit_retry_in_flight and not is_retry:
+            return None
+        elif is_retry or self._rate_limit_streak:
             self._bump_rate_limit_cooldown()
             return None
+        else:
+            wait_seconds = _rate_limit_wait_seconds(content)
 
-        deadline = max(self._blocked_until, now + wait_seconds)
-        self._blocked_until = deadline
-        effective_wait = max(wait_seconds, int(math.ceil(deadline - now - 1e-6)))
-        return (effective_wait, deadline, self._rate_limit_retry_epoch, now)
+        self._blocked_until = max(self._blocked_until, now + wait_seconds)
+        if is_retry or self._rate_limit_retry_in_flight:
+            return None
 
-    def _claim_rate_limit_retry(
-        self, scheduled_until: float, epoch: int, sleep_started_at: float
-    ) -> bool:
+        return (math.ceil(self._blocked_until - now), self._rate_limit_retry_epoch)
+
+    def _claim_rate_limit_retry(self, epoch: int) -> bool:
         """Claim the single post-sleep retry once the shared deadline has elapsed."""
-        now = time.time()
         if (
             self._rate_limit_retry_in_flight
             or self._rate_limit_retry_epoch != epoch
-            or self._blocked_until > scheduled_until + 0.5
-            or (now - sleep_started_at >= 0.5 and now < self._blocked_until)
+            or time.time() < self._blocked_until
         ):
             return False
         self._rate_limit_retry_epoch += 1
@@ -864,9 +849,9 @@ class AristonAPI:
         headers = getattr(response, "headers", None)
         retry_plan = self._prepare_rate_limit_retry(content, headers, is_retry)
         if retry_plan is not None:
-            wait_seconds, scheduled_until, epoch, sleep_started_at = retry_plan
+            wait_seconds, epoch = retry_plan
             time.sleep(wait_seconds)
-            if self._claim_rate_limit_retry(scheduled_until, epoch, sleep_started_at):
+            if self._claim_rate_limit_retry(epoch):
                 try:
                     return self.__request(method, path, params, body, True)
                 finally:
@@ -1847,9 +1832,9 @@ class AristonAPI:
         headers = getattr(response, "headers", None)
         retry_plan = self._prepare_rate_limit_retry(content, headers, is_retry)
         if retry_plan is not None:
-            wait_seconds, scheduled_until, epoch, sleep_started_at = retry_plan
+            wait_seconds, epoch = retry_plan
             await asyncio.sleep(wait_seconds)
-            if self._claim_rate_limit_retry(scheduled_until, epoch, sleep_started_at):
+            if self._claim_rate_limit_retry(epoch):
                 try:
                     return await self.__async_request(
                         method, path, params, body, True, timeout_seconds
