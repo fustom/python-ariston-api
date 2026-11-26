@@ -459,6 +459,155 @@ class AristonAPIRequestTests(unittest.TestCase):
             ],
         )
 
+    def test_menu_items_cache_supported_ids_and_recover_on_500_or_550(self):
+        expected = [124, 119, 349, 348, 337, 340, 341]
+        expected_requests = [
+            "124,119",
+            "123,125,115",
+            "349,348",
+            "337,340,341",
+            "127",
+            "124,119,349,348,337,340,341",
+            "124,119,349,348,337,340,341",
+            "124,119",
+            "123,125,115",
+            "349,348",
+            "337,340,341",
+            "127",
+            "124,119",
+            "349,348",
+            "337,340,341",
+            "124,119",
+            "349,348",
+            "124,119",
+            "123,125,115",
+            "349,348",
+            "337,340,341",
+            "127",
+            "124,119",
+            "349,348",
+            "337,340,341",
+        ]
+
+        def run_case(is_async, failure_status):
+            api = AristonAPI("user", "password", api_url="https://example.test/api/")
+            requests = []
+            fail_combined = False
+            fail_group_once = False
+
+            def handle(path):
+                nonlocal fail_group_once
+                requested = path.split("menuItems=", 1)[1]
+                requests.append(requested)
+                if requested in ("123,125,115", "127"):
+                    return []
+                if fail_combined and requested == "124,119,349,348,337,340,341":
+                    raise ConnectionException(failure_status)
+                if fail_group_once and requested == "349,348":
+                    fail_group_once = False
+                    raise ConnectionException(failure_status)
+                return [{"id": int(item_id)} for item_id in requested.split(",")]
+
+            if not is_async:
+                with patch.object(api, "_get", side_effect=handle):
+                    results = [api.get_menu_items("gw-1", include_hybrid_items=True)]
+                    results.append(api.get_menu_items("gw-1", include_hybrid_items=True))
+                    fail_combined = True
+                    results.append(api.get_menu_items("gw-1", include_hybrid_items=True))
+                    results.append(api.get_menu_items("gw-1", include_hybrid_items=True))
+                    fail_group_once = True
+                    results.append(api.get_menu_items("gw-1", include_hybrid_items=True))
+                    results.append(api.get_menu_items("gw-1", include_hybrid_items=True))
+            else:
+                async def async_handle(path):
+                    return handle(path)
+
+                async def exercise():
+                    nonlocal fail_combined, fail_group_once
+                    with patch.object(api, "_async_get", new=AsyncMock(side_effect=async_handle)):
+                        out = [await api.async_get_menu_items("gw-1", include_hybrid_items=True)]
+                        out.append(await api.async_get_menu_items("gw-1", include_hybrid_items=True))
+                        fail_combined = True
+                        out.append(await api.async_get_menu_items("gw-1", include_hybrid_items=True))
+                        out.append(await api.async_get_menu_items("gw-1", include_hybrid_items=True))
+                        fail_group_once = True
+                        out.append(await api.async_get_menu_items("gw-1", include_hybrid_items=True))
+                        out.append(await api.async_get_menu_items("gw-1", include_hybrid_items=True))
+                        return out
+
+                results = asyncio.run(exercise())
+
+            for result in results:
+                self.assertEqual([item["id"] for item in result], expected)
+            self.assertEqual(requests, expected_requests)
+            self.assertIn("gw-1", api._hybrid_menu_grouped_mode)
+
+        for is_async in (False, True):
+            for failure_status in (500, 550):
+                with self.subTest(is_async=is_async, failure_status=failure_status):
+                    run_case(is_async, failure_status)
+
+    def test_incomplete_menu_discovery_expires_and_recovers_skipped_id(self):
+        for is_async in (False, True):
+            with self.subTest(is_async=is_async):
+                api = AristonAPI("user", "password", api_url="https://example.test/api/")
+                fail_125 = True
+
+                def handle(path):
+                    requested = path.split("menuItems=", 1)[1]
+                    if requested == "123,125,115":
+                        raise ConnectionException(500)
+                    if fail_125 and requested == "125":
+                        raise ConnectionException(500)
+                    return [{"id": int(item_id)} for item_id in requested.split(",")]
+
+                if not is_async:
+                    with patch.object(api, "_get", side_effect=handle):
+                        first = api.get_menu_items("gw-1", include_hybrid_items=True)
+                        cached = api.get_menu_items("gw-1", include_hybrid_items=True)
+                        self.assertIn("gw-1", api._hybrid_menu_items_expires_at)
+                        fail_125 = False
+                        api._hybrid_menu_items_expires_at["gw-1"] = 0.0
+                        refreshed = api.get_menu_items("gw-1", include_hybrid_items=True)
+                else:
+                    async def async_handle(path):
+                        return handle(path)
+
+                    async def exercise():
+                        nonlocal fail_125
+                        with patch.object(api, "_async_get", new=AsyncMock(side_effect=async_handle)):
+                            r1 = await api.async_get_menu_items("gw-1", include_hybrid_items=True)
+                            r2 = await api.async_get_menu_items("gw-1", include_hybrid_items=True)
+                            self.assertIn("gw-1", api._hybrid_menu_items_expires_at)
+                            fail_125 = False
+                            api._hybrid_menu_items_expires_at["gw-1"] = 0.0
+                            r3 = await api.async_get_menu_items("gw-1", include_hybrid_items=True)
+                            return r1, r2, r3
+
+                    first, cached, refreshed = asyncio.run(exercise())
+
+                self.assertNotIn(125, [item["id"] for item in first])
+                self.assertNotIn(125, [item["id"] for item in cached])
+                self.assertIn(125, [item["id"] for item in refreshed])
+                self.assertNotIn("gw-1", api._hybrid_menu_items_expires_at)
+
+    def test_async_menu_items_do_not_cache_partial_discovery_on_429(self):
+        api = AristonAPI("user", "password", api_url="https://example.test/api/")
+
+        async def get(path):
+            requested = path.split("menuItems=", 1)[1]
+            if requested == "349,348":
+                raise ConnectionException(429, b"Requests are blocked")
+            return [{"id": int(item_id)} for item_id in requested.split(",")]
+
+        async def exercise():
+            with self.assertRaises(ConnectionException):
+                await api.async_get_menu_items("gw-1", include_hybrid_items=True)
+
+        with patch.object(api, "_async_get", new=AsyncMock(side_effect=get)):
+            asyncio.run(exercise())
+        self.assertNotIn("gw-1", api._hybrid_menu_items)
+
     def test_async_properties_recovers_from_batch_errors_with_small_requests(self):
         scenarios = (
             (
