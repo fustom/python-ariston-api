@@ -120,17 +120,18 @@ class RateLimitTests(unittest.TestCase):
         self.assertGreater(api._blocked_until, 0)  # block window was set
 
     def test_429_without_parsable_body(self):
-        responses = [
-            _sync_response(429, b"Too many requests"),
-            _sync_response(200, b"{}", {"ok": True}),
-        ]
-        http = MagicMock(side_effect=responses)
+        http = MagicMock(return_value=_sync_response(429, b"Too many requests"))
+        api = _api()
         with patch("ariston.ariston_api.requests.request", http):
-            result = _api()._get("https://example/api")
+            with self.assertRaises(ConnectionException) as ctx:
+                api._get("https://example/api")
 
-        self.assertEqual(result, {"ok": True})
-        self.assertEqual(self.clock.sleeps, [5])  # documented fallback
-        self.assertEqual(http.call_count, 2)
+        self.assertEqual(ctx.exception.args, (429, "Too many requests"))
+        self.assertEqual(ctx.exception.retry_after, 60.0)
+        self.assertEqual(self.clock.sleeps, [])  # immediate cooldown, no blind 5s retry
+        self.assertEqual(http.call_count, 1)
+        self.assertEqual(api._rate_limit_streak, 1)
+        self.assertEqual(api._blocked_until, self.clock.time() + 60)
 
     def test_429_twice_raises(self):
         body = b"Requests are blocked for 10 seconds"
@@ -238,29 +239,29 @@ class RateLimitTests(unittest.TestCase):
             side_effect=[
                 _sync_response(429, body),
                 _sync_response(429, body),
-                _sync_response(429, body),
                 _sync_response(200, b"{}", {"ok": True}),
             ]
         )
         with patch("ariston.ariston_api.requests.request", http):
-            with self.assertRaises(ConnectionException):
+            with self.assertRaises(ConnectionException) as first_err:
                 api._get("https://example/api")
-            first_cooldown = api._blocked_until - self.clock.time()
-            self.assertGreater(first_cooldown, 50)
+            self.assertEqual(first_err.exception.retry_after, 60.0)
+            self.assertEqual(api._blocked_until - self.clock.time(), 60.0)
             self.assertEqual(api._rate_limit_streak, 1)
-            self.assertEqual(self.clock.sleeps, [5])
+            self.assertEqual(self.clock.sleeps, [])
 
-            api._blocked_until = 0.0
-            with self.assertRaises(ConnectionException):
+            self.clock.now += 60
+            with self.assertRaises(ConnectionException) as second_err:
                 api._get("https://example/api")
-            second_cooldown = api._blocked_until - self.clock.time()
-            self.assertGreater(second_cooldown, 110)
+            self.assertEqual(second_err.exception.retry_after, 120.0)
+            self.assertEqual(api._blocked_until - self.clock.time(), 120.0)
             self.assertEqual(api._rate_limit_streak, 2)
-            self.assertEqual(self.clock.sleeps, [5])
+            self.assertEqual(self.clock.sleeps, [])
 
-            api._blocked_until = 0.0
+            self.clock.now += 120
             self.assertEqual(api._get("https://example/api"), {"ok": True})
             self.assertEqual(api._rate_limit_streak, 0)
+        self.assertEqual(http.call_count, 3)
 
     def test_async_429_without_duration_sets_cooldown_and_retry_after_header(self):
         api = _api()
@@ -269,7 +270,6 @@ class RateLimitTests(unittest.TestCase):
         responses = [
             resp_with_header,
             _FakeAiohttpResponse(200, b"{}", {"ok": True}),
-            _FakeAiohttpResponse(429, b"Requests are blocked"),
             _FakeAiohttpResponse(429, b"Requests are blocked"),
         ]
         calls: list[int] = []
@@ -281,20 +281,25 @@ class RateLimitTests(unittest.TestCase):
             ):
                 ok = await api._async_get("https://example/api")
                 api._blocked_until = 0.0
-                with self.assertRaises(ConnectionException):
+                with self.assertRaises(ConnectionException) as ctx:
                     await api._async_get("https://example/api")
-                return ok
+                return ok, ctx.exception
 
-        self.assertEqual(asyncio.run(run()), {"ok": True})
-        self.assertEqual(self.clock.sleeps, [13, 5])
+        ok, exc = asyncio.run(run())
+        self.assertEqual(ok, {"ok": True})
+        self.assertEqual(exc.args, (429, b"Requests are blocked"))
+        self.assertEqual(exc.retry_after, 60.0)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(self.clock.sleeps, [13])
         self.assertEqual(api._rate_limit_streak, 1)
-        self.assertGreater(api._blocked_until - self.clock.time(), 50)
+        self.assertEqual(api._blocked_until - self.clock.time(), 60.0)
 
     def test_async_overlapping_429_sends_single_retry(self):
         api = _api()
+        body = b"Requests are blocked for 5 seconds"
         responses = [
-            _FakeAiohttpResponse(429, b"Requests are blocked"),
-            _FakeAiohttpResponse(429, b"Requests are blocked"),
+            _FakeAiohttpResponse(429, body),
+            _FakeAiohttpResponse(429, body),
             _FakeAiohttpResponse(429, b"Requests are blocked"),
         ]
         calls: list[int] = []
@@ -314,9 +319,50 @@ class RateLimitTests(unittest.TestCase):
 
         results = asyncio.run(run())
         self.assertEqual(len(calls), 3)  # 2 initial calls + 1 single claimed retry
-        self.assertEqual(self.clock.sleeps, [5, 5])
+        self.assertEqual(self.clock.sleeps, [6, 6])
         self.assertEqual(api._rate_limit_streak, 1)
         self.assertTrue(all(isinstance(res, ConnectionException) for res in results))
+
+    async def _run_overlapping_gets(
+        self, api: AristonAPI, responses: list, calls: list[int]
+    ) -> list[Any]:
+        with patch(
+            "ariston.ariston_api.aiohttp.ClientSession",
+            self._overlapping_session_cls(responses, calls, self.real_sleep),
+        ):
+            return await asyncio.gather(
+                api._async_get("https://example/api/a"),
+                api._async_get("https://example/api/b"),
+                return_exceptions=True,
+            )
+
+    def test_async_overlapping_unparsable_429_escalates_cooldown_once(self):
+        for initial_streak, expected_streak, expected_cooldown in (
+            (0, 1, 60.0),
+            (1, 2, 120.0),
+        ):
+            with self.subTest(initial_streak=initial_streak):
+                api = _api()
+                api._rate_limit_streak = initial_streak
+                responses = [
+                    _FakeAiohttpResponse(429, b"Requests are blocked"),
+                    _FakeAiohttpResponse(429, b"Requests are blocked"),
+                ]
+                calls: list[int] = []
+                self.clock.sleeps.clear()
+
+                results = asyncio.run(
+                    self._run_overlapping_gets(api, responses, calls)
+                )
+                self.assertEqual(len(calls), 2)
+                self.assertEqual(self.clock.sleeps, [])
+                self.assertEqual(api._rate_limit_streak, expected_streak)
+                self.assertEqual(
+                    api._blocked_until - self.clock.time(), expected_cooldown
+                )
+                for res in results:
+                    self.assertIsInstance(res, ConnectionException)
+                    self.assertEqual(res.retry_after, expected_cooldown)
 
     async def _overlapping_sleep(self, seconds: int) -> None:
         self.clock.sleeps.append(seconds)
@@ -503,6 +549,162 @@ class RateLimitTests(unittest.TestCase):
 
                 asyncio.run(run())
                 self.assertEqual(len(calls), 1)
+
+    async def _async_get_expecting_connection_error(
+        self, api: AristonAPI, url: str = "https://example/api"
+    ) -> ConnectionException:
+        with self.assertRaises(ConnectionException) as ctx:
+            await api._async_get(url)
+        return ctx.exception
+
+    def test_short_circuit_rate_limit_exposes_retry_after(self):
+        for is_async in (False, True):
+            with self.subTest(is_async=is_async):
+                api = _api()
+                api._blocked_until = self.clock.time() + 45.5
+
+                if not is_async:
+                    with self.assertRaises(ConnectionException) as ctx:
+                        api._get("https://example/api")
+                    exc = ctx.exception
+                else:
+                    exc = asyncio.run(
+                        self._async_get_expecting_connection_error(api)
+                    )
+
+                self.assertEqual(exc.args[0], 429)
+                self.assertEqual(exc.retry_after, 45.5)
+
+    def test_repeated_parsed_429_exposes_retry_after(self):
+        body = b"Requests are blocked for 10 seconds"
+        http = MagicMock(
+            side_effect=[_sync_response(429, body), _sync_response(429, body)]
+        )
+        api = _api()
+        with patch("ariston.ariston_api.requests.request", http):
+            with self.assertRaises(ConnectionException) as ctx:
+                api._get("https://example/api")
+        self.assertEqual(ctx.exception.args[0], 429)
+        self.assertEqual(ctx.exception.retry_after, 11.0)
+
+    def test_ok_response_during_active_block_preserves_streak(self):
+        api = _api()
+        api._rate_limit_streak = 2
+        api._blocked_until = self.clock.time() + 60.0
+        with patch(
+            "ariston.ariston_api.requests.request",
+            return_value=_sync_response(200, b"{}", {"ok": True}),
+        ):
+            result = api._AristonAPI__request(
+                "GET", "https://example/api", rate_limit_retry=True
+            )
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(api._rate_limit_streak, 2)
+
+        async_api = _api()
+        async_api._rate_limit_streak = 1
+        responses = [
+            _FakeAiohttpResponse(429, b"Requests are blocked"),
+            _FakeAiohttpResponse(200, b"{}", {"ok": True}),
+        ]
+        calls: list[int] = []
+        results = asyncio.run(
+            self._run_overlapping_gets(async_api, responses, calls)
+        )
+        self.assertIsInstance(results[0], ConnectionException)
+        self.assertEqual(results[1], {"ok": True})
+        self.assertEqual(async_api._rate_limit_streak, 2)
+
+    def test_async_5xx_retry_respects_active_rate_limit_block(self):
+        api = _api()
+        calls: list[str] = []
+        sleep_started = asyncio.Event()
+        block_active = asyncio.Event()
+
+        async def fake_sleep(seconds: int) -> None:
+            self.clock.sleeps.append(seconds)
+            sleep_started.set()
+            await block_active.wait()
+            self.clock.now += seconds
+
+        async def request(_method: str, url: str, **kwargs: Any):
+            calls.append(url)
+            if url.endswith("/five-hundred"):
+                return _FakeAiohttpResponse(500)
+            return _FakeAiohttpResponse(429, b"Requests are blocked")
+
+        async def run():
+            with patch("ariston.ariston_api.aiohttp.ClientSession") as session, patch(
+                "ariston.ariston_api.asyncio.sleep", side_effect=fake_sleep
+            ):
+                session.return_value.__aenter__.return_value.request = AsyncMock(
+                    side_effect=request
+                )
+                task_500 = asyncio.create_task(
+                    api._async_get("https://example/api/five-hundred")
+                )
+                await sleep_started.wait()
+                with self.assertRaises(ConnectionException) as err_429:
+                    await api._async_get("https://example/api/four-two-nine")
+                block_active.set()
+                with self.assertRaises(ConnectionException) as err_500:
+                    await task_500
+                return err_429.exception, err_500.exception
+
+        err_429, err_500 = asyncio.run(asyncio.wait_for(run(), timeout=5))
+        self.assertEqual(
+            calls,
+            [
+                "https://example/api/five-hundred",
+                "https://example/api/four-two-nine",
+            ],
+        )  # 500 retry did not hit server during active 429 block
+        self.assertEqual(api._rate_limit_streak, 1)
+        self.assertEqual(err_429.retry_after, 60.0)
+        self.assertEqual(err_500.args[0], 429)
+        self.assertEqual(err_500.retry_after, 55.0)
+
+    def test_connect_preserves_rate_limit_exception_and_retry_after(self):
+        sync_api = _api()
+        with patch(
+            "ariston.ariston_api.requests.request",
+            return_value=_sync_response(429, b"Requests are blocked"),
+        ):
+            with self.assertRaises(ConnectionException) as sync_ctx:
+                sync_api.connect()
+        self.assertEqual(sync_ctx.exception.args, (429, "Requests are blocked"))
+        self.assertEqual(sync_ctx.exception.retry_after, 60.0)
+
+        async_api = _api()
+        calls: list[int] = []
+
+        async def run_connect() -> ConnectionException:
+            with patch(
+                "ariston.ariston_api.aiohttp.ClientSession",
+                _fake_session_cls(
+                    [_FakeAiohttpResponse(429, b"Requests are blocked")], calls
+                ),
+            ):
+                with self.assertRaises(ConnectionException) as ctx:
+                    await async_api.async_connect()
+                return ctx.exception
+
+        async_exc = asyncio.run(run_connect())
+        self.assertEqual(async_exc.args, (429, b"Requests are blocked"))
+        self.assertEqual(async_exc.retry_after, 60.0)
+
+    def test_bare_429_while_retry_in_flight_does_not_escalate_streak(self):
+        api = _api()
+        api._rate_limit_retry_in_flight = True
+        with patch(
+            "ariston.ariston_api.requests.request",
+            return_value=_sync_response(429, b"Requests are blocked"),
+        ):
+            with self.assertRaises(ConnectionException) as ctx:
+                api._get("https://example/api")
+        self.assertEqual(ctx.exception.args, (429, "Requests are blocked"))
+        self.assertIsNone(ctx.exception.retry_after)
+        self.assertEqual(api._rate_limit_streak, 0)
 
 
 if __name__ == "__main__":

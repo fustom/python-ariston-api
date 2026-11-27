@@ -49,7 +49,6 @@ _LOGGER = logging.getLogger(__name__)
 
 _RATE_LIMIT_RE = re.compile(rb"blocked for (\d+) seconds", re.IGNORECASE)
 _RATE_LIMIT_WAIT_LOG = "Rate limited (429) for %s seconds; waiting it out"
-_UNPARSABLE_INITIAL_WAIT_SECONDS = 5
 _UNPARSABLE_COOLDOWN_BASE_SECONDS = 60
 _UNPARSABLE_COOLDOWN_MAX_SECONDS = 600
 _INCOMPLETE_MENU_CACHE_TTL_SECONDS = 3600
@@ -74,20 +73,6 @@ def _parse_retry_after_seconds(headers: Any) -> Optional[int]:
     if raw.isdigit():
         return max(1, int(raw))
     return None
-
-
-def _rate_limit_wait_seconds(content: bytes) -> int:
-    """Effective wait for a 429: parsed duration + 1s margin, else 5s."""
-    parsed = _parse_block_seconds(content)
-    if parsed is None:
-        _LOGGER.warning(
-            "Rate limited (429) without parsable block duration; "
-            "falling back to %ss wait",
-            _UNPARSABLE_INITIAL_WAIT_SECONDS,
-        )
-        return _UNPARSABLE_INITIAL_WAIT_SECONDS
-    _LOGGER.warning(_RATE_LIMIT_WAIT_LOG, parsed + 1)
-    return parsed + 1
 
 
 def _raise_unless_http_500(error: ConnectionException) -> None:
@@ -147,6 +132,11 @@ def _menu_items_path(api_url: str, gw_id: str, menu_items_query: str) -> str:
 class ConnectionException(Exception):
     """When can not connect to Ariston cloud"""
 
+    def __init__(self, *args: Any, retry_after: Optional[float] = None) -> None:
+        """Initialize the connection exception with optional rate-limit delay."""
+        super().__init__(*args)
+        self.retry_after = retry_after
+
 
 class AristonAPI:
     """Ariston API class"""
@@ -182,8 +172,18 @@ class AristonAPI:
         # Sync (requests) R2 web-app session; created lazily on first use.
         self.__r2_requests_session: Optional[requests.Session] = None
 
-    def _bump_rate_limit_cooldown(self) -> None:
+    def _rate_limit_exception(self, payload: Any) -> ConnectionException:
+        """Build a 429 ConnectionException carrying the remaining block delay."""
+        remaining = self._blocked_until - time.time()
+        return ConnectionException(
+            429,
+            payload,
+            retry_after=remaining if remaining > 0 else None,
+        )
+
+    def _bump_rate_limit_cooldown(self, now: Optional[float] = None) -> None:
         """Advance unparsable-429 streak and extend the shared block window."""
+        current_time = time.time() if now is None else now
         self._rate_limit_streak += 1
         cooldown = min(
             _UNPARSABLE_COOLDOWN_MAX_SECONDS,
@@ -196,10 +196,10 @@ class AristonAPI:
             self._rate_limit_streak,
             cooldown,
         )
-        self._blocked_until = max(self._blocked_until, time.time() + cooldown)
+        self._blocked_until = max(self._blocked_until, current_time + cooldown)
 
     def _prepare_rate_limit_retry(
-        self, content: bytes, headers: Any, is_retry: bool
+        self, content: bytes, headers: Any, is_rate_limit_retry: bool
     ) -> Optional[tuple[int, int]]:
         """Update rate-limit state and return the wait and epoch for a retry."""
         now = time.time()
@@ -207,19 +207,18 @@ class AristonAPI:
         if parsed is None:
             parsed = _parse_retry_after_seconds(headers)
 
-        if parsed is not None:
-            wait_seconds = parsed + 1
-            _LOGGER.warning(_RATE_LIMIT_WAIT_LOG, wait_seconds)
-        elif self._rate_limit_retry_in_flight and not is_retry:
+        if parsed is None:
+            if not is_rate_limit_retry and (
+                self._rate_limit_retry_in_flight or now < self._blocked_until
+            ):
+                return None
+            self._bump_rate_limit_cooldown(now)
             return None
-        elif is_retry or self._rate_limit_streak:
-            self._bump_rate_limit_cooldown()
-            return None
-        else:
-            wait_seconds = _rate_limit_wait_seconds(content)
 
+        wait_seconds = parsed + 1
+        _LOGGER.warning(_RATE_LIMIT_WAIT_LOG, wait_seconds)
         self._blocked_until = max(self._blocked_until, now + wait_seconds)
-        if is_retry or self._rate_limit_retry_in_flight:
+        if is_rate_limit_retry or self._rate_limit_retry_in_flight:
             return None
 
         return (math.ceil(self._blocked_until - now), self._rate_limit_retry_epoch)
@@ -258,6 +257,8 @@ class AristonAPI:
 
             return True
 
+        except ConnectionException:
+            raise
         except Exception as error:
             raise ConnectionException() from error
 
@@ -782,12 +783,12 @@ class AristonAPI:
         params: Optional[dict[str, Any]] = None,
         body: Any = None,
         is_retry: bool = False,
+        rate_limit_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Request with requests"""
-        if not is_retry and time.time() < self._blocked_until:
-            raise ConnectionException(
-                429,
-                "Rate limited; skipping request until the block window ends",
+        if not rate_limit_retry and time.time() < self._blocked_until:
+            raise self._rate_limit_exception(
+                "Rate limited; skipping request until the block window ends"
             )
         headers: dict[str, Any] = {
             "User-Agent": self.__user_agent,
@@ -815,7 +816,7 @@ class AristonAPI:
                     return None
                 case 429:
                     return self.__handle_rate_limit(
-                        response, is_retry, method, path, params, body
+                        response, rate_limit_retry, method, path, params, body
                     )
                 case _:
                     if not is_retry:
@@ -823,7 +824,8 @@ class AristonAPI:
                         return self.__request(method, path, params, body, True)
                     raise ConnectionException(response.status_code)
 
-        self._rate_limit_streak = 0
+        if time.time() >= self._blocked_until:
+            self._rate_limit_streak = 0
         if len(response.content) > 0:
             json = response.json()
             _LOGGER.debug("Response %s", json)
@@ -838,7 +840,7 @@ class AristonAPI:
     def __handle_rate_limit(
         self,
         response,
-        is_retry: bool,
+        is_rate_limit_retry: bool,
         method: str,
         path: str,
         params: Optional[dict[str, Any]],
@@ -847,16 +849,18 @@ class AristonAPI:
         """Sleep out the 429 block window, retry once, per-instance deadline."""
         content = response.content
         headers = getattr(response, "headers", None)
-        retry_plan = self._prepare_rate_limit_retry(content, headers, is_retry)
+        retry_plan = self._prepare_rate_limit_retry(
+            content, headers, is_rate_limit_retry
+        )
         if retry_plan is not None:
             wait_seconds, epoch = retry_plan
             time.sleep(wait_seconds)
             if self._claim_rate_limit_retry(epoch):
                 try:
-                    return self.__request(method, path, params, body, True)
+                    return self.__request(method, path, params, body, True, True)
                 finally:
                     self._rate_limit_retry_in_flight = False
-        raise ConnectionException(response.status_code, content.decode())
+        raise self._rate_limit_exception(content.decode())
 
     def _get(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
         """GET request"""
@@ -991,6 +995,8 @@ class AristonAPI:
 
             return True
 
+        except ConnectionException:
+            raise
         except Exception as error:
             raise ConnectionException() from error
 
@@ -1749,12 +1755,12 @@ class AristonAPI:
         body: Any = None,
         is_retry: bool = False,
         timeout_seconds: int = 30,
+        rate_limit_retry: bool = False,
     ) -> Optional[dict[str, Any]]:
         """Async request with aiohttp"""
-        if not is_retry and time.time() < self._blocked_until:
-            raise ConnectionException(
-                429,
-                "Rate limited; skipping request until the block window ends",
+        if not rate_limit_retry and time.time() < self._blocked_until:
+            raise self._rate_limit_exception(
+                "Rate limited; skipping request until the block window ends"
             )
         headers: dict[str, Any] = {
             "User-Agent": self.__user_agent,
@@ -1791,7 +1797,13 @@ class AristonAPI:
                         return None
                     case 429:
                         return await self.__async_handle_rate_limit(
-                            response, is_retry, method, path, params, body, timeout_seconds
+                            response,
+                            rate_limit_retry,
+                            method,
+                            path,
+                            params,
+                            body,
+                            timeout_seconds,
                         )
                     case _:
                         if not is_retry:
@@ -1801,7 +1813,8 @@ class AristonAPI:
                             )
                         raise ConnectionException(response.status)
 
-            self._rate_limit_streak = 0
+            if time.time() >= self._blocked_until:
+                self._rate_limit_streak = 0
             if response.content_length and response.content_length > 0:
                 json = await response.json()
                 _LOGGER.debug("Response %s", json)
@@ -1820,7 +1833,7 @@ class AristonAPI:
     async def __async_handle_rate_limit(
         self,
         response,
-        is_retry: bool,
+        is_rate_limit_retry: bool,
         method: str,
         path: str,
         params: Optional[dict[str, Any]],
@@ -1830,18 +1843,20 @@ class AristonAPI:
         """Sleep out the 429 block window, retry once, share the deadline."""
         content = await response.content.read()
         headers = getattr(response, "headers", None)
-        retry_plan = self._prepare_rate_limit_retry(content, headers, is_retry)
+        retry_plan = self._prepare_rate_limit_retry(
+            content, headers, is_rate_limit_retry
+        )
         if retry_plan is not None:
             wait_seconds, epoch = retry_plan
             await asyncio.sleep(wait_seconds)
             if self._claim_rate_limit_retry(epoch):
                 try:
                     return await self.__async_request(
-                        method, path, params, body, True, timeout_seconds
+                        method, path, params, body, True, timeout_seconds, True
                     )
                 finally:
                     self._rate_limit_retry_in_flight = False
-        raise ConnectionException(response.status, content)
+        raise self._rate_limit_exception(content)
 
     async def _async_get(
         self, path: str, params: Optional[dict[str, Any]] = None
