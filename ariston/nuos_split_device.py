@@ -7,6 +7,7 @@ from typing import Optional
 
 from .velis_device import AristonVelisDevice
 from .const import (
+    NuosSplitHpState,
     NuosSplitOperativeMode,
     NuosSplitPlantMode,
     NuosSplitProperties,
@@ -135,6 +136,28 @@ class AristonNuosSplitDevice(AristonVelisDevice):
     def water_heater_plant_mode_texts(self) -> list[str]:
         """Get the available plant mode names"""
         return [mode.name for mode in NuosSplitPlantMode]
+
+    @property
+    def hp_state_value(self) -> Optional[int]:
+        """Get the raw heat pump state value"""
+        return self.data.get(NuosSplitProperties.HP_STATE, None)
+
+    @property
+    def hp_state_text(self) -> Optional[str]:
+        """Get the heat pump state name (LOCKOUT / IDLE / HEATING / ...)"""
+        value = self.hp_state_value
+        if value is None:
+            return None
+        try:
+            return NuosSplitHpState(value).name
+        except ValueError:
+            _LOGGER.debug("Unknown Nuos Split heat pump state value: %s", value)
+            return None
+
+    @property
+    def hp_state_texts(self) -> list[str]:
+        """Get the available heat pump state names"""
+        return [state.name for state in NuosSplitHpState]
 
     def set_water_heater_plant_mode(self, plant_mode: str) -> None:
         """Set the plant mode (MANUAL / PROGRAM)"""

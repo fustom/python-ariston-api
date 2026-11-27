@@ -265,6 +265,20 @@ class NuosSplitOperativeMode(WaterHeaterMode):
 
 
 @unique
+class NuosSplitHpState(Enum):
+    """NuosSplit heat pump state (slpPlantData `hpState`).
+
+    Values from the official web app enum `eSlpHpState` (2026-11-27).
+    """
+
+    LOCKOUT = 0
+    IDLE = 1
+    HEATING = 2
+    ANTILEGIONELLA = 3
+    ANTIFREEZE = 4
+
+
+@unique
 class LydosPlantMode(WaterHeaterMode):
     """Lydos hybrid plant mode enum"""
 
